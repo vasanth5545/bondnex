@@ -1,0 +1,36 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "bondnex-8727f",
+          "appId": "1:1098757641748:android:8747f7f72bf78e78d1b901",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "bondnex-8727f",
+          "configurations": {
+            "android": "1:1098757641748:android:8747f7f72bf78e78d1b901",
+            "ios": "1:1098757641748:ios:7ae037799543b8e0d1b901"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}
