@@ -1,10 +1,12 @@
 // File: lib/main.dart
-// Ithuthaan unga app-oda entry point.
+// This is the entry point of your application.
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:device_preview/device_preview.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart'; // Import Firebase Core
+import 'firebase_options.dart'; // Import Firebase Options
 
 // Providers
 import 'providers/theme_provider.dart';
@@ -15,7 +17,7 @@ import 'providers/app_lock_provider.dart';
 import 'splash_screen.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
-import 'email_verification_screen.dart';
+// EmailVerificationScreen is now navigated to directly, so no import is needed here if not used elsewhere.
 import 'home_page.dart';
 import 'app_lock_screen.dart';
 
@@ -29,10 +31,17 @@ import 'settings/usage_access_screen.dart';
 import 'settings/panic_button_settings_screen.dart';
 import 'settings/uninstall_confirm_screen.dart';
 
-void main() {
+void main() async {
+  // Ensure that Flutter bindings are initialized before calling Firebase.
+  WidgetsFlutterBinding.ensureInitialized();
+  // Initialize Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   runApp(
     DevicePreview(
-      enabled: true,
+      enabled: true, // Set to false for production release
       builder: (context) => MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => ThemeProvider()),
@@ -175,7 +184,8 @@ class BondNexApp extends StatelessWidget {
         '/home': (context) => const HomePage(),
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
-        '/email_verification': (context) => const EmailVerificationScreen(),
+        // The line below was causing the error and has been removed.
+        // '/email_verification': (context) => const EmailVerificationScreen(),
         '/settings': (context) => const SettingsScreen(),
         '/account_settings': (context) => const AccountSettingsScreen(),
         '/change_name': (context) => const ChangeNameScreen(),

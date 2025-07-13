@@ -1,4 +1,3 @@
-// File: lib/providers/user_provider.dart
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:math'; // For random number generation
@@ -7,9 +6,10 @@ class UserProvider extends ChangeNotifier {
   // User's own details
   String _userName = "Your Name";
   File? _userImage;
-  final String _myPermanentId = "USER-ABCD-1234";
+  // MODIFICATION: Changed from final to allow updating after registration
+  String _myPermanentId = ""; 
   String? _instagramUsername;
-  String? _instagramFollowers; // This will now be set by a simulated API call
+  String? _instagramFollowers; 
 
   // Partner's details
   String? _partnerId;
@@ -17,11 +17,18 @@ class UserProvider extends ChangeNotifier {
   // Getters
   String get userName => _userName;
   File? get userImage => _userImage;
+  // MODIFICATION: This now returns the dynamic ID from the database
   String get myPermanentId => _myPermanentId;
   String? get instagramUsername => _instagramUsername;
   String? get instagramFollowers => _instagramFollowers;
   String? get partnerId => _partnerId;
   bool get isPartnerConnected => _partnerId != null;
+
+  // MODIFICATION: New method to set the unique ID after fetching from PHP
+  void setMyPermanentId(String id) {
+    _myPermanentId = id;
+    notifyListeners();
+  }
 
   // Methods to update state
   void updateUserName(String newName) {
@@ -33,16 +40,14 @@ class UserProvider extends ChangeNotifier {
     _userImage = newImage;
     notifyListeners();
   }
-
-  // **THE FIX IS HERE** - Now only takes username, simulates fetching followers
+  
   Future<void> updateInstagramProfile(String? newUsername) async {
     _instagramUsername = newUsername;
     
     if (newUsername != null && newUsername.isNotEmpty) {
-      // Simulate fetching followers from an API
-      await Future.delayed(const Duration(seconds: 2)); // Simulate network delay
+      await Future.delayed(const Duration(seconds: 2)); 
       final random = Random();
-      final followers = random.nextInt(5000000) + 1000; // Generate random followers
+      final followers = random.nextInt(5000000) + 1000; 
       
       if (followers > 1000000) {
         _instagramFollowers = '${(followers / 1000000).toStringAsFixed(1)}M';
@@ -53,7 +58,6 @@ class UserProvider extends ChangeNotifier {
       }
 
     } else {
-      // If username is removed, clear followers
       _instagramFollowers = null;
     }
     

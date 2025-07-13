@@ -1,21 +1,55 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import '../providers/user_provider.dart'; // Assuming you have a UserProvider
 
+class LinkPartnerScreen extends StatefulWidget {
+  // This screen now accepts the unique ID generated from the backend
+  final String? myPermanentId;
 
-class LinkPartnerScreen extends StatelessWidget {
-  const LinkPartnerScreen({super.key});
+  const LinkPartnerScreen({super.key, this.myPermanentId});
+
+  @override
+  State<LinkPartnerScreen> createState() => _LinkPartnerScreenState();
+}
+
+class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
+  late TextEditingController _myPermanentIdController;
+  final TextEditingController _partnerCodeController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize the controller with the ID passed from the verification screen
+    // If no ID is passed (e.g., user is already logged in), it will be empty.
+    _myPermanentIdController = TextEditingController(text: widget.myPermanentId ?? '');
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // If the controller is empty, try to get the ID from the provider
+    // This handles cases where the user is already logged in and comes back to this screen.
+    if (_myPermanentIdController.text.isEmpty) {
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
+        _myPermanentIdController.text = userProvider.myPermanentId;
+    }
+  }
+
+  @override
+  void dispose() {
+    _myPermanentIdController.dispose();
+    _partnerCodeController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final partnerCodeController = TextEditingController(text: 'A7B3C9X2'); // Example code
-
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        automaticallyImplyLeading: false, // Back arrow venaam, home page-la
-        title: Text('Link with your partner', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        automaticallyImplyLeading: false,
+        title: const Text('Link with Your Partner'),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -24,85 +58,72 @@ class LinkPartnerScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Generate Code Section
-              _buildSectionTitle('Generate a unique partner code'),
+              // Section to display and share the user's own unique ID
+              Text(
+                'Share Your Unique ID',
+                style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
               Text(
-                'Share this code with your partner to link your accounts.',
-                style: GoogleFonts.poppins(color: Colors.grey[400]),
+                'Share this ID with your partner so they can link with you.',
+                style: GoogleFonts.poppins(color: Colors.grey[600]),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: partnerCodeController,
-                      readOnly: true,
-                      style: const TextStyle(color: Colors.white, fontSize: 18),
-                      decoration: _buildInputDecoration('').copyWith(
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.copy, color: Colors.grey),
-                          onPressed: () {
-                            Clipboard.setData(ClipboardData(text: partnerCodeController.text));
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Code copied to clipboard!')),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
+              TextField(
+                controller: _myPermanentIdController,
+                readOnly: true, // The user cannot edit their own ID
+                decoration: InputDecoration(
+                  labelText: 'Your Unique ID',
+                  suffixIcon: IconButton(
+                    icon: Icon(Icons.copy, color: Theme.of(context).iconTheme.color),
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: _myPermanentIdController.text));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Your Unique ID has been copied!')),
+                      );
+                    },
                   ),
-                  const SizedBox(width: 16),
-                  ElevatedButton(
-                    onPressed: () { /* TODO: Share functionality */ },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF007AFF),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text('Share'),
-                  ),
-                ],
+                ),
               ),
               const SizedBox(height: 40),
-              // Enter Code Section
-              _buildSectionTitle("Enter your partner's code"),
+
+              // Section to enter the partner's unique ID
+              Text(
+                "Enter Your Partner's ID",
+                style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
               Text(
-                'If your partner has already generated a code, enter it here.',
-                style: GoogleFonts.poppins(color: Colors.grey[400]),
+                "If your partner has shared their ID with you, enter it here.",
+                style: GoogleFonts.poppins(color: Colors.grey[600]),
               ),
               const SizedBox(height: 16),
-              TextField(decoration: _buildInputDecoration('Enter code')),
+              TextField(
+                controller: _partnerCodeController,
+                decoration: const InputDecoration(hintText: "Enter partner's ID"),
+              ),
               const SizedBox(height: 24),
               ElevatedButton(
-                onPressed: () { /* TODO: Confirm partner code logic */ },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF007AFF),
-                  minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Text('Confirm', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                onPressed: () {
+                  // TODO: Add logic to send the partner's ID to your backend
+                  // to create the link in your `partners` table.
+                  if (_partnerCodeController.text.isNotEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Linking with ${_partnerCodeController.text}...')),
+                    );
+                    // Example: context.read<UserProvider>().linkPartner(_partnerCodeController.text);
+                  } else {
+                     ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please enter a valid partner ID.')),
+                    );
+                  }
+                },
+                child: Text('Confirm & Link Partner', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Text(title, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white));
-  }
-
-  InputDecoration _buildInputDecoration(String hint) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(color: Colors.grey[500]),
-      filled: true,
-      fillColor: const Color(0xFF1C2C44),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
     );
   }
 }
