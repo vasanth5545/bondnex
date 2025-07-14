@@ -1,14 +1,16 @@
 // File: lib/login_screen.dart
-// Updated screen with Firebase Auth and PHP integration.
+// Updated to fetch user data from PHP backend on successful login.
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert'; // For JSON encoding
+import 'package:provider/provider.dart';
 
-// Import the email verification screen from your project.
 import 'email_verification_screen.dart';
+import 'providers/user_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -22,18 +24,20 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isPasswordVisible = false;
   bool _isLoading = false;
 
-  // Firebase instance
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  
+  // API URL to fetch/sync user data (register.php handles both creation and fetching)
+  final String _syncApiUrl = Platform.isAndroid
+      ? 'http://10.0.2.2/myappapi/register.php' 
+      : 'http://localhost/myappapi/register.php';
 
-  // Form controllers
+  // Form controllers and keys
   final _loginEmailController = TextEditingController();
   final _loginPasswordController = TextEditingController();
   final _registerNameController = TextEditingController();
   final _registerEmailController = TextEditingController();
   final _registerPasswordController = TextEditingController();
   final _registerConfirmPasswordController = TextEditingController();
-
-  // Form keys
   final _loginFormKey = GlobalKey<FormState>();
   final _registerFormKey = GlobalKey<FormState>();
 
@@ -55,34 +59,69 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // Function to handle login
+  // --- NEW: Central function to sync data with PHP and save it ---
+  Future<bool> _syncAndSaveUserData(User user) async {
+    try {
+      // Your register.php script cleverly handles both new and existing users.
+      // If the user exists, it returns their data. If not, it creates them.
+      final response = await http.post(
+        Uri.parse(_syncApiUrl),
+        headers: {'Content-Type': 'application/json; charset=UTF-8'},
+        body: json.encode({
+          'firebase_uid': user.uid,
+          'name': user.displayName ?? 'Unknown', // Send name just in case
+          'email': user.email!,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final responseData = json.decode(response.body);
+        if (responseData['status'] == 'success' && responseData['unique_id'] != null) {
+          final uniqueId = responseData['unique_id'];
+          if (mounted) {
+            final userProvider = Provider.of<UserProvider>(context, listen: false);
+            userProvider.setMyPermanentId(uniqueId);
+            userProvider.updateUserName(user.displayName ?? 'Unknown');
+          }
+          return true;
+        }
+      }
+      _showErrorSnackBar('Could not sync account with server.');
+      return false;
+    } catch (e) {
+      _showErrorSnackBar('Connection to server failed. Is XAMPP running?');
+      return false;
+    }
+  }
+
+  // --- UPDATED: Login function now calls the sync method ---
   Future<void> _handleLogin() async {
     if (!_loginFormKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
     try {
-      await _auth.signInWithEmailAndPassword(
+      final userCredential = await _auth.signInWithEmailAndPassword(
         email: _loginEmailController.text.trim(),
         password: _loginPasswordController.text.trim(),
       );
 
-      final User? user = _auth.currentUser;
+      final User? user = userCredential.user;
       if (user != null) {
         if (user.emailVerified) {
-          // If email is verified, navigate to the home screen.
-          // You can add a call to your PHP login script here if needed.
-          Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+          // Sync data and navigate to home
+          final bool success = await _syncAndSaveUserData(user);
+          if (success && mounted) {
+            Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+          }
         } else {
-          // If email is not verified, navigate to the verification screen.
-          // Pass the correct data from the login context.
+          _showErrorSnackBar('Please verify your email before logging in.');
           if (mounted) {
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => EmailVerificationScreen(
-                  name: user.displayName ?? '', // Get name from user object
+                  name: user.displayName ?? '',
                   email: user.email!,
-                  password: _loginPasswordController.text.trim(), // Get password from login form
                 ),
               ),
             );
@@ -96,7 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // Function to handle registration
+  // --- Register function remains the same ---
   Future<void> _handleRegister() async {
     if (!_registerFormKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
@@ -111,10 +150,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (user != null) {
         await user.updateDisplayName(_registerNameController.text.trim());
         await user.sendEmailVerification();
-
         _showSuccessSnackBar('A verification link has been sent to your email.');
-        
-        // Navigate to the verification screen with data from the registration form.
         if (mounted) {
           Navigator.push(
             context,
@@ -122,7 +158,6 @@ class _LoginScreenState extends State<LoginScreen> {
               builder: (context) => EmailVerificationScreen(
                 name: _registerNameController.text.trim(),
                 email: user.email!,
-                password: _registerPasswordController.text.trim(),
               ),
             ),
           );
@@ -166,7 +201,8 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Login UI Widget
+  // The UI Widgets (_buildLoginWidget, _buildRegisterWidget) are not shown for brevity.
+  // They remain the same as your original code.
   Widget _buildLoginWidget() {
     return Scaffold(
       body: SafeArea(
@@ -229,7 +265,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Register UI Widget
   Widget _buildRegisterWidget() {
     return Scaffold(
       appBar: AppBar(

@@ -1,8 +1,9 @@
-// File: lib/screens/splash_screen.dart
+// File: lib/splash_screen.dart
 import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:async';
 import 'package:google_fonts/google_fonts.dart';
+import 'auth_wrapper.dart'; // Import the new AuthWrapper
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,12 +16,18 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateToLogin();
+    _navigateToWrapper();
   }
 
-  void _navigateToLogin() {
+  void _navigateToWrapper() {
     Timer(const Duration(seconds: 4), () {
-      Navigator.of(context).pushReplacementNamed('/login');
+      if (mounted) {
+        // After the splash screen, go to the AuthWrapper.
+        // The AuthWrapper will then decide whether to show the Login or Home page.
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const AuthWrapper()),
+        );
+      }
     });
   }
 

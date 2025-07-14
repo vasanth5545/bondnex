@@ -1,12 +1,11 @@
 // File: lib/main.dart
-// This is the entry point of your application.
+// UPDATED: The home property now points to SplashScreen, which then leads to AuthWrapper.
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:device_preview/device_preview.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_core/firebase_core.dart'; // Import Firebase Core
-import 'firebase_options.dart'; // Import Firebase Options
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 // Providers
 import 'providers/theme_provider.dart';
@@ -14,14 +13,12 @@ import 'providers/user_provider.dart';
 import 'providers/app_lock_provider.dart';
 
 // Screens
+import 'auth_wrapper.dart'; // Import the new wrapper
 import 'splash_screen.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
-// EmailVerificationScreen is now navigated to directly, so no import is needed here if not used elsewhere.
 import 'home_page.dart';
 import 'app_lock_screen.dart';
-
-// Settings Screens
 import 'settings_screen.dart';
 import 'settings/account_settings_screen.dart';
 import 'settings/change_name_screen.dart';
@@ -32,24 +29,19 @@ import 'settings/panic_button_settings_screen.dart';
 import 'settings/uninstall_confirm_screen.dart';
 
 void main() async {
-  // Ensure that Flutter bindings are initialized before calling Firebase.
   WidgetsFlutterBinding.ensureInitialized();
-  // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
   
   runApp(
-    DevicePreview(
-      enabled: true, // Set to false for production release
-      builder: (context) => MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => ThemeProvider()),
-          ChangeNotifierProvider(create: (_) => UserProvider()),
-          ChangeNotifierProvider(create: (_) => AppLockProvider()),
-        ],
-        child: const BondNexApp(),
-      ),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => UserProvider()),
+        ChangeNotifierProvider(create: (_) => AppLockProvider()),
+      ],
+      child: const BondNexApp(),
     ),
   );
 }
@@ -57,18 +49,11 @@ void main() async {
 class BondNexApp extends StatelessWidget {
   const BondNexApp({super.key});
 
-  Future<bool> _isLockEnabled() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('appLockEnabled') ?? false;
-  }
-
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
 
     return MaterialApp(
-      locale: DevicePreview.locale(context),
-      builder: DevicePreview.appBuilder,
       title: 'BondNex',
       debugShowCheckedModeBanner: false,
       themeMode: themeProvider.themeMode,
@@ -167,25 +152,14 @@ class BondNexApp extends StatelessWidget {
           unselectedItemColor: Colors.grey[600],
         ),
       ),
-      home: FutureBuilder<bool>(
-        future: _isLockEnabled(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(body: Center(child: CircularProgressIndicator()));
-          }
-          if (snapshot.hasData && snapshot.data == true) {
-            return const AppLockScreen();
-          }
-          return const SplashScreen();
-        },
-      ),
+      
+      // The starting point of the app is now the SplashScreen.
+      home: const SplashScreen(),
+      
+      // The routes are defined for named navigation.
       routes: {
-        '/splash': (context) => const SplashScreen(),
-        '/home': (context) => const HomePage(),
         '/login': (context) => const LoginScreen(),
-        '/register': (context) => const RegisterScreen(),
-        // The line below was causing the error and has been removed.
-        // '/email_verification': (context) => const EmailVerificationScreen(),
+        '/home': (context) => const HomePage(),
         '/settings': (context) => const SettingsScreen(),
         '/account_settings': (context) => const AccountSettingsScreen(),
         '/change_name': (context) => const ChangeNameScreen(),

@@ -1,38 +1,76 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'dart:math'; // For random number generation
+import 'dart:math';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UserProvider extends ChangeNotifier {
   // User's own details
   String _userName = "Your Name";
   File? _userImage;
-  // MODIFICATION: Changed from final to allow updating after registration
-  String _myPermanentId = ""; 
+  String _myPermanentId = "";
   String? _instagramUsername;
-  String? _instagramFollowers; 
+  String? _instagramFollowers;
 
   // Partner's details
   String? _partnerId;
 
+  // Keys for SharedPreferences
+  static const String _uniqueIdKey = 'user_unique_id';
+  static const String _userNameKey = 'user_name';
+
   // Getters
   String get userName => _userName;
   File? get userImage => _userImage;
-  // MODIFICATION: This now returns the dynamic ID from the database
   String get myPermanentId => _myPermanentId;
   String? get instagramUsername => _instagramUsername;
   String? get instagramFollowers => _instagramFollowers;
   String? get partnerId => _partnerId;
   bool get isPartnerConnected => _partnerId != null;
 
-  // MODIFICATION: New method to set the unique ID after fetching from PHP
-  void setMyPermanentId(String id) {
-    _myPermanentId = id;
+  UserProvider() {
+    // Load user data from local storage when the provider is created
+    loadUserFromStorage();
+  }
+
+  // --- NEW: Load user data from SharedPreferences ---
+  Future<void> loadUserFromStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    _myPermanentId = prefs.getString(_uniqueIdKey) ?? "";
+    _userName = prefs.getString(_userNameKey) ?? "Your Name";
     notifyListeners();
   }
 
-  // Methods to update state
+  // --- NEW: Save user data to SharedPreferences ---
+  Future<void> _saveUserToStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_uniqueIdKey, _myPermanentId);
+    await prefs.setString(_userNameKey, _userName);
+  }
+
+  // --- UPDATED: Methods now save to storage automatically ---
+  void setMyPermanentId(String id) {
+    if (id.isNotEmpty) {
+      _myPermanentId = id;
+      _saveUserToStorage(); // Save automatically
+      notifyListeners();
+    }
+  }
+
   void updateUserName(String newName) {
-    _userName = newName;
+    if (newName.isNotEmpty) {
+      _userName = newName;
+      _saveUserToStorage(); // Save automatically
+      notifyListeners();
+    }
+  }
+
+  // --- NEW: Clear user data on logout ---
+  Future<void> clearUserData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); // Clears all data from SharedPreferences
+    _userName = "Your Name";
+    _myPermanentId = "";
+    _partnerId = null;
     notifyListeners();
   }
 
@@ -40,7 +78,8 @@ class UserProvider extends ChangeNotifier {
     _userImage = newImage;
     notifyListeners();
   }
-  
+
+  // --- FIXED: Added the missing updateInstagramProfile method ---
   Future<void> updateInstagramProfile(String? newUsername) async {
     _instagramUsername = newUsername;
     

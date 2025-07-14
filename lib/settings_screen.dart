@@ -2,7 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Import Firebase Auth
+
 import 'providers/theme_provider.dart';
+import 'providers/user_provider.dart'; // Import UserProvider to clear data
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -14,6 +17,31 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationSwitch = false;
   bool _locationSwitch = false;
+
+  // --- UPDATED & FIXED: Logout Function ---
+  // This function now ONLY handles signing out and clearing data.
+  // It does NOT handle navigation. The AuthWrapper will handle navigation automatically.
+  Future<void> _handleLogout() async {
+    try {
+      // Get the UserProvider instance before any async operations.
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+      // 1. Sign out from Firebase. This will trigger the authStateChanges stream.
+      await FirebaseAuth.instance.signOut();
+
+      // 2. Clear local data from SharedPreferences via the provider.
+      await userProvider.clearUserData();
+
+    } catch (e) {
+      // If an error occurs, show a SnackBar, but only if the widget is still mounted.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error logging out: ${e.toString()}')),
+        );
+      }
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -99,7 +127,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: 'Setup or update your emergency contact',
                 onTap: () => Navigator.pushNamed(context, '/panic_button_settings'),
               ),
-              // **THE FIX IS HERE** - Added navigation to Uninstall Lock screen
               _buildSettingsTile(
                 icon: Icons.phonelink_lock_outlined,
                 title: 'Uninstall Lock',
@@ -112,7 +139,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildSectionHeader('Support'),
               _buildSettingsTile(icon: Icons.help_outline, title: 'FAQ section', onTap: () {}),
               _buildSettingsTile(icon: Icons.headset_mic_outlined, title: 'Contact Support', onTap: () {}),
-              _buildSettingsTile(icon: Icons.logout, title: 'Logout', isLogout: true, onTap: () {}),
+              
+              // Logout tile calls the updated and fixed logout function
+              _buildSettingsTile(
+                icon: Icons.logout, 
+                title: 'Logout', 
+                isLogout: true, 
+                onTap: _handleLogout,
+              ),
+              
               const SizedBox(height: 20),
               Center(child: Text('Version 1.0.0', style: GoogleFonts.poppins(color: Colors.grey[600]))),
               const SizedBox(height: 20),
@@ -139,7 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildSettingsTile({required IconData icon, required String title, String? subtitle, required VoidCallback onTap, bool isLogout = false}) {
     return ListTile(
-      leading: Icon(icon),
+      leading: Icon(icon, color: isLogout ? Colors.redAccent : null),
       title: Text(
         title,
         style: GoogleFonts.poppins(fontWeight: FontWeight.w500, color: isLogout ? Colors.redAccent : null),

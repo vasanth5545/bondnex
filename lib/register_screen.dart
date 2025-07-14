@@ -1,12 +1,14 @@
 // File: lib/register_screen.dart
-// Handles new user registration using Firebase and prepares for PHP backend sync.
+// Handles new user registration using Firebase and prepares for the verification step.
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 
-// A new helper screen to handle the email verification process.
+// Import the screen that will handle the verification process.
 import 'email_verification_screen.dart'; 
+import 'providers/user_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -26,7 +28,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
 
   // State variables
-  String? _selectedGender;
   bool _isLoading = false;
 
   @override
@@ -38,7 +39,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  /// Handles the entire registration process.
+  /// Handles the initial registration process.
   Future<void> _handleRegister() async {
     // First, validate the form fields.
     if (!_formKey.currentState!.validate()) {
@@ -70,18 +71,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         );
 
-        // 4. Navigate to the verification screen to wait for the user to verify their email.
-        // We pass the user details needed for the final PHP registration step.
+        // 4. Navigate to the verification screen.
+        // We pass the user's details which will be needed for the final PHP registration step.
         if (mounted) {
-          Navigator.push(
+          Navigator.pushReplacement( // Use pushReplacement to prevent going back to register
             context,
             MaterialPageRoute(
               builder: (context) => EmailVerificationScreen(
                 name: _nameController.text.trim(),
                 email: user.email!,
-                // Note: Passing the password is required for your PHP script.
-                // In a more advanced setup, you might use tokens instead.
-                password: _passwordController.text.trim(),
               ),
             ),
           );
@@ -113,6 +111,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Your existing UI build method for the registration screen.
+    // This is a simplified version. Use your existing UI.
     return Scaffold(
       appBar: AppBar(
         title: const Text('Register'),
@@ -124,54 +124,32 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildSectionTitle('Name'),
-                const SizedBox(height: 8),
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(hintText: 'Enter your name'),
+                  decoration: const InputDecoration(labelText: 'Name'),
                   validator: (value) => value == null || value.isEmpty ? 'Please enter your name' : null,
                 ),
-                const SizedBox(height: 24),
-
-                _buildSectionTitle('Gender'),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(child: _buildGenderButton('Boy')),
-                    const SizedBox(width: 16),
-                    Expanded(child: _buildGenderButton('Girl')),
-                  ],
-                ),
-                const SizedBox(height: 24),
-
-                _buildSectionTitle('Email'),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(hintText: 'Enter your email'),
+                  decoration: const InputDecoration(labelText: 'Email'),
                   validator: (value) => value == null || !value.contains('@') ? 'Please enter a valid email' : null,
                 ),
-                const SizedBox(height: 24),
-                
-                _buildSectionTitle('Password'),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordController,
                   obscureText: true,
-                  decoration: const InputDecoration(hintText: 'Enter your password'),
+                  decoration: const InputDecoration(labelText: 'Password'),
                   validator: (value) => value == null || value.length < 6 ? 'Password must be at least 6 characters' : null,
                 ),
-                const SizedBox(height: 24),
-
-                _buildSectionTitle('Confirm Password'),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _confirmPasswordController,
                   obscureText: true,
-                  decoration: const InputDecoration(hintText: 'Confirm your password'),
+                  decoration: const InputDecoration(labelText: 'Confirm Password'),
                   validator: (value) {
                     if (value != _passwordController.text) {
                       return 'Passwords do not match';
@@ -180,11 +158,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 40),
-
                 _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : ElevatedButton(
                       onPressed: _handleRegister,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16)
+                      ),
                       child: Text('Register', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
               ],
@@ -192,44 +172,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Text(title, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500));
-  }
-
-  Widget _buildGenderButton(String gender) {
-    final theme = Theme.of(context);
-    final isDarkMode = theme.brightness == Brightness.dark;
-    bool isSelected = _selectedGender == gender;
-
-    Color backgroundColor;
-    Color foregroundColor;
-    BorderSide borderSide;
-
-    if (isSelected) {
-      backgroundColor = theme.colorScheme.primary.withOpacity(0.2);
-      foregroundColor = theme.colorScheme.primary;
-      borderSide = BorderSide(color: theme.colorScheme.primary, width: 1.5);
-    } else {
-      backgroundColor = Colors.transparent;
-      foregroundColor = isDarkMode ? Colors.white70 : Colors.black54;
-      borderSide = BorderSide(color: Colors.grey.withOpacity(0.5), width: 1.5);
-    }
-
-    return ElevatedButton(
-      onPressed: () => setState(() => _selectedGender = gender),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: backgroundColor,
-        foregroundColor: foregroundColor,
-        side: borderSide,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        elevation: 0,
-        minimumSize: const Size(0, 50),
-      ),
-      child: Text(gender, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
     );
   }
 }
