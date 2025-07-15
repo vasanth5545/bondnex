@@ -1,12 +1,8 @@
 // File: lib/login_screen.dart
-// Updated to fetch user data from PHP backend on successful login.
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import 'email_verification_screen.dart';
@@ -25,11 +21,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  
-  // API URL to fetch/sync user data (register.php handles both creation and fetching)
-  final String _syncApiUrl = Platform.isAndroid
-      ? 'http://10.0.2.2/myappapi/register.php' 
-      : 'http://localhost/myappapi/register.php';
 
   // Form controllers and keys
   final _loginEmailController = TextEditingController();
@@ -59,42 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // --- NEW: Central function to sync data with PHP and save it ---
-  Future<bool> _syncAndSaveUserData(User user) async {
-    try {
-      // Your register.php script cleverly handles both new and existing users.
-      // If the user exists, it returns their data. If not, it creates them.
-      final response = await http.post(
-        Uri.parse(_syncApiUrl),
-        headers: {'Content-Type': 'application/json; charset=UTF-8'},
-        body: json.encode({
-          'firebase_uid': user.uid,
-          'name': user.displayName ?? 'Unknown', // Send name just in case
-          'email': user.email!,
-        }),
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final responseData = json.decode(response.body);
-        if (responseData['status'] == 'success' && responseData['unique_id'] != null) {
-          final uniqueId = responseData['unique_id'];
-          if (mounted) {
-            final userProvider = Provider.of<UserProvider>(context, listen: false);
-            userProvider.setMyPermanentId(uniqueId);
-            userProvider.updateUserName(user.displayName ?? 'Unknown');
-          }
-          return true;
-        }
-      }
-      _showErrorSnackBar('Could not sync account with server.');
-      return false;
-    } catch (e) {
-      _showErrorSnackBar('Connection to server failed. Is XAMPP running?');
-      return false;
-    }
-  }
-
-  // --- UPDATED: Login function now calls the sync method ---
+  // --- UPDATED LOGIN LOGIC ---
   Future<void> _handleLogin() async {
     if (!_loginFormKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
@@ -108,10 +64,14 @@ class _LoginScreenState extends State<LoginScreen> {
       final User? user = userCredential.user;
       if (user != null) {
         if (user.emailVerified) {
-          // Sync data and navigate to home
-          final bool success = await _syncAndSaveUserData(user);
+          // Fetch user data from MySQL backend
+          final userProvider = Provider.of<UserProvider>(context, listen: false);
+          final bool success = await userProvider.fetchAndSetUserData(user);
+
           if (success && mounted) {
             Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+          } else if (mounted) {
+            _showErrorSnackBar('Could not sync your account. Please try again.');
           }
         } else {
           _showErrorSnackBar('Please verify your email before logging in.');
@@ -135,7 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- Register function remains the same ---
+  // --- UPDATED REGISTER LOGIC ---
   Future<void> _handleRegister() async {
     if (!_registerFormKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
@@ -152,6 +112,7 @@ class _LoginScreenState extends State<LoginScreen> {
         await user.sendEmailVerification();
         _showSuccessSnackBar('A verification link has been sent to your email.');
         if (mounted) {
+          // Navigate to verification screen, which will handle the final registration step
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -177,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }
   }
-  
+
   void _showSuccessSnackBar(String message) {
      if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -201,8 +162,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // The UI Widgets (_buildLoginWidget, _buildRegisterWidget) are not shown for brevity.
-  // They remain the same as your original code.
   Widget _buildLoginWidget() {
     return Scaffold(
       body: SafeArea(

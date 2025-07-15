@@ -1,13 +1,7 @@
-// File: lib/email_verification_screen.dart
-// UPDATED: Wrapped the Column with a SingleChildScrollView to fix layout overflow.
-
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 
 import 'providers/user_provider.dart';
@@ -31,10 +25,6 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   Timer? _timer;
   bool _isSyncing = false;
 
-  final String _apiUrl = Platform.isAndroid 
-    ? 'http://10.0.2.2/myappapi/register.php' 
-    : 'http://localhost/myappapi/register.php';
-
   @override
   void initState() {
     super.initState();
@@ -53,60 +43,33 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         _timer?.cancel();
         return;
     }
-    
+
     await user.reload();
-    
+
     if (user.emailVerified) {
       _timer?.cancel();
-      
+
       if (mounted) {
         setState(() {
             _isEmailVerified = true;
             _isSyncing = true;
         });
       }
-      
-      _showSnackBar('Email successfully verified! Syncing your account...', Colors.green);
-      await _syncWithPhpRegister(user);
-    }
-  }
 
-  Future<void> _syncWithPhpRegister(User user) async {
-    try {
-      final response = await http.post(
-        Uri.parse(_apiUrl),
-        headers: {'Content-Type': 'application/json; charset=UTF-8'},
-        body: json.encode({
-          'firebase_uid': user.uid,
-          'name': widget.name,
-          'email': widget.email,
-        }),
-      );
-      
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        if (responseData['status'] == 'success' && responseData['unique_id'] != null) {
-          final String uniqueId = responseData['unique_id'];
-          
-          if (mounted) {
-            final userProvider = Provider.of<UserProvider>(context, listen: false);
-            userProvider.setMyPermanentId(uniqueId);
-            userProvider.updateUserName(widget.name);
-            _showSnackBar('Account synced successfully! Welcome!', Colors.green);
-            Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
-          }
-        } else {
-           _showSnackBar(responseData['message'] ?? 'Server sync failed.', Colors.redAccent);
-        }
-      } else {
-        _showSnackBar('Server error: ${response.statusCode}. Please try again.', Colors.redAccent);
+      _showSnackBar('Email successfully verified! Syncing your account...', Colors.green);
+      // --- UPDATED LOGIC ---
+      // Now we call the central function from our provider
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final bool success = await userProvider.fetchAndSetUserData(user, newName: widget.name);
+
+      if (success && mounted) {
+        _showSnackBar('Account synced successfully! Welcome!', Colors.green);
+        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+      } else if (mounted) {
+        _showSnackBar('Could not sync your account. Please try logging in.', Colors.redAccent);
+        // Navigate to login if sync fails
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
       }
-    } catch (e) {
-      _showSnackBar('Could not connect to the local server. Is XAMPP running?', Colors.redAccent);
-    } finally {
-        if (mounted) {
-            setState(() => _isSyncing = false);
-        }
     }
   }
 
@@ -127,7 +90,6 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
-        // FIX: Added SingleChildScrollView to prevent overflow on smaller screens.
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
@@ -186,7 +148,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 onPressed: () {
                   _timer?.cancel();
                   FirebaseAuth.instance.signOut();
-                  Navigator.of(context).pop(); 
+                  Navigator.of(context).pop();
                 },
                 child: const Text('Cancel & Go Back'),
               ),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:math';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class UserProvider extends ChangeNotifier {
@@ -13,6 +16,11 @@ class UserProvider extends ChangeNotifier {
 
   // Partner's details
   String? _partnerId;
+
+  // --- NEW: API URL ---
+  final String _syncApiUrl = Platform.isAndroid
+      ? 'http://10.160.155.209/myappapi/register.php'
+      : 'http://localhost/myappapi/register.php';
 
   // Keys for SharedPreferences
   static const String _uniqueIdKey = 'user_unique_id';
@@ -28,11 +36,9 @@ class UserProvider extends ChangeNotifier {
   bool get isPartnerConnected => _partnerId != null;
 
   UserProvider() {
-    // Load user data from local storage when the provider is created
     loadUserFromStorage();
   }
 
-  // --- NEW: Load user data from SharedPreferences ---
   Future<void> loadUserFromStorage() async {
     final prefs = await SharedPreferences.getInstance();
     _myPermanentId = prefs.getString(_uniqueIdKey) ?? "";
@@ -40,18 +46,54 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- NEW: Save user data to SharedPreferences ---
   Future<void> _saveUserToStorage() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_uniqueIdKey, _myPermanentId);
     await prefs.setString(_userNameKey, _userName);
   }
 
-  // --- UPDATED: Methods now save to storage automatically ---
+  // --- NEW & IMPORTANT: Function to fetch/sync data with your MySQL backend ---
+  /// Fetches user data from MySQL backend using Firebase user object.
+  /// If the user is new, it registers them in MySQL.
+  /// Returns `true` if successful, `false` otherwise.
+  Future<bool> fetchAndSetUserData(User fcmUser, {String? newName}) async {
+    try {
+      final response = await http.post(
+        Uri.parse(_syncApiUrl),
+        headers: {'Content-Type': 'application/json; charset=UTF-8'},
+        body: json.encode({
+          'firebase_uid': fcmUser.uid,
+          'name': newName ?? fcmUser.displayName ?? 'Unknown User',
+          'email': fcmUser.email!,
+        }),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final responseData = json.decode(response.body);
+        if (responseData['status'] == 'success' && responseData['unique_id'] != null) {
+          // Update provider state with fetched/created data
+          _myPermanentId = responseData['unique_id'];
+          _userName = newName ?? fcmUser.displayName ?? 'Unknown User';
+          
+          // Save to local storage for persistence
+          await _saveUserToStorage();
+          notifyListeners();
+          return true; // Success
+        }
+      }
+      // If server returns an error or unexpected response
+      return false;
+    } catch (e) {
+      // If there's a network error
+      debugPrint("Error fetching user data: $e");
+      return false;
+    }
+  }
+
   void setMyPermanentId(String id) {
     if (id.isNotEmpty) {
       _myPermanentId = id;
-      _saveUserToStorage(); // Save automatically
+      _saveUserToStorage();
       notifyListeners();
     }
   }
@@ -59,15 +101,14 @@ class UserProvider extends ChangeNotifier {
   void updateUserName(String newName) {
     if (newName.isNotEmpty) {
       _userName = newName;
-      _saveUserToStorage(); // Save automatically
+      _saveUserToStorage();
       notifyListeners();
     }
   }
 
-  // --- NEW: Clear user data on logout ---
   Future<void> clearUserData() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear(); // Clears all data from SharedPreferences
+    await prefs.clear();
     _userName = "Your Name";
     _myPermanentId = "";
     _partnerId = null;
@@ -79,15 +120,14 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- FIXED: Added the missing updateInstagramProfile method ---
   Future<void> updateInstagramProfile(String? newUsername) async {
     _instagramUsername = newUsername;
-    
+
     if (newUsername != null && newUsername.isNotEmpty) {
-      await Future.delayed(const Duration(seconds: 2)); 
+      await Future.delayed(const Duration(seconds: 2));
       final random = Random();
-      final followers = random.nextInt(5000000) + 1000; 
-      
+      final followers = random.nextInt(5000000) + 1000;
+
       if (followers > 1000000) {
         _instagramFollowers = '${(followers / 1000000).toStringAsFixed(1)}M';
       } else if (followers > 1000) {
@@ -99,7 +139,7 @@ class UserProvider extends ChangeNotifier {
     } else {
       _instagramFollowers = null;
     }
-    
+
     notifyListeners();
   }
 
