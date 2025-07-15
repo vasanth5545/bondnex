@@ -1,33 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+
 import 'home_page.dart';
 import 'login_screen.dart';
+import 'providers/user_provider.dart';
+import 'email_verification_screen.dart'; // Import verification screen
 
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // This stream listens for changes in the user's login state in real-time.
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
-        
-        // If the connection is still loading, show a progress indicator.
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
-        // If the snapshot has data, it means the user is logged in.
         if (snapshot.hasData) {
-          // So, show the HomePage.
-          return const HomePage();
+          final User user = snapshot.data!;
+
+          // Check if the user's email is verified
+          if (user.emailVerified) {
+            // If verified, load user data from Firestore
+            final userProvider = Provider.of<UserProvider>(context, listen: false);
+            return FutureBuilder(
+              future: userProvider.loadUserDataFromFirestore(user),
+              builder: (context, futureSnapshot) {
+                if (futureSnapshot.connectionState == ConnectionState.waiting) {
+                  return const Scaffold(body: Center(child: CircularProgressIndicator()));
+                }
+                // After data is loaded, navigate to HomePage
+                return const HomePage();
+              },
+            );
+          } else {
+            // If not verified, show the verification screen
+            return EmailVerificationScreen(name: user.displayName ?? '', email: user.email!);
+          }
         }
 
-        // If there's no data, the user is logged out.
-        // So, show the LoginScreen.
+        // If no user is logged in, show the LoginScreen
         return const LoginScreen();
       },
     );

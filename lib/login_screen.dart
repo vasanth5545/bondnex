@@ -1,12 +1,13 @@
 // File: lib/login_screen.dart
-import 'dart:async';
+// UPDATED: Login logic simplified. Navigation is now handled by AuthWrapper.
+
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import 'services/auth_service.dart';
 import 'email_verification_screen.dart';
-import 'providers/user_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -20,9 +21,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isPasswordVisible = false;
   bool _isLoading = false;
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-
-  // Form controllers and keys
   final _loginEmailController = TextEditingController();
   final _loginPasswordController = TextEditingController();
   final _registerNameController = TextEditingController();
@@ -50,84 +48,77 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // --- UPDATED LOGIN LOGIC ---
+  // --- REWRITTEN LOGIN LOGIC ---
   Future<void> _handleLogin() async {
     if (!_loginFormKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
+    final authService = Provider.of<AuthService>(context, listen: false);
+
     try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
-        email: _loginEmailController.text.trim(),
-        password: _loginPasswordController.text.trim(),
+      final User? user = await authService.signInWithEmailAndPassword(
+        _loginEmailController.text.trim(),
+        _loginPasswordController.text.trim(),
       );
 
-      final User? user = userCredential.user;
-      if (user != null) {
-        if (user.emailVerified) {
-          // Fetch user data from MySQL backend
-          final userProvider = Provider.of<UserProvider>(context, listen: false);
-          final bool success = await userProvider.fetchAndSetUserData(user);
-
-          if (success && mounted) {
-            Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
-          } else if (mounted) {
-            _showErrorSnackBar('Could not sync your account. Please try again.');
-          }
-        } else {
-          _showErrorSnackBar('Please verify your email before logging in.');
-          if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => EmailVerificationScreen(
-                  name: user.displayName ?? '',
-                  email: user.email!,
-                ),
-              ),
-            );
-          }
-        }
+      // **THE FIX IS HERE**: No more manual navigation.
+      // AuthWrapper will detect the login and handle everything.
+      // We only need to check if the email is NOT verified to show the verification screen.
+      if (user != null && !user.emailVerified && mounted) {
+        _showErrorSnackBar('Please verify your email before logging in.');
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EmailVerificationScreen(
+              name: user.displayName ?? '',
+              email: user.email!,
+            ),
+          ),
+        );
       }
-    } on FirebaseAuthException catch (e) {
-      _showErrorSnackBar(e.message ?? 'Login failed.');
+      // If login is successful, AuthWrapper will automatically navigate to HomePage.
+
+    } on Exception catch (e) {
+      _showErrorSnackBar(e.toString());
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
-  // --- UPDATED REGISTER LOGIC ---
+  // --- REWRITTEN REGISTER LOGIC ---
   Future<void> _handleRegister() async {
     if (!_registerFormKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
+    
+    final authService = Provider.of<AuthService>(context, listen: false);
 
     try {
-      final UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-        email: _registerEmailController.text.trim(),
-        password: _registerPasswordController.text.trim(),
+      final User? user = await authService.registerWithEmailAndPassword(
+        _registerNameController.text.trim(),
+        _registerEmailController.text.trim(),
+        _registerPasswordController.text.trim(),
       );
 
-      final User? user = userCredential.user;
-      if (user != null) {
-        await user.updateDisplayName(_registerNameController.text.trim());
-        await user.sendEmailVerification();
+      if (user != null && mounted) {
         _showSuccessSnackBar('A verification link has been sent to your email.');
-        if (mounted) {
-          // Navigate to verification screen, which will handle the final registration step
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => EmailVerificationScreen(
-                name: _registerNameController.text.trim(),
-                email: user.email!,
-              ),
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EmailVerificationScreen(
+              name: _registerNameController.text.trim(),
+              email: user.email!,
             ),
-          );
-        }
+          ),
+        );
       }
-    } on FirebaseAuthException catch (e) {
-      _showErrorSnackBar(e.message ?? 'Registration failed.');
+    } on Exception catch (e) {
+      _showErrorSnackBar(e.toString());
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -150,6 +141,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showRegisterPage() => _pageController.animateToPage(1, duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
   void _showLoginPage() => _pageController.animateToPage(0, duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
 
+  // --- UI CODE (REMAINS THE SAME) ---
   @override
   Widget build(BuildContext context) {
     return PageView(

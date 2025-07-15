@@ -1,5 +1,5 @@
 // File: lib/main.dart
-// UPDATED: The home property now points to SplashScreen, which then leads to AuthWrapper.
+// UPDATED: Added AuthService to the MultiProvider list.
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,9 +11,10 @@ import 'firebase_options.dart';
 import 'providers/theme_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/app_lock_provider.dart';
+import 'services/auth_service.dart'; // Import the AuthService
 
 // Screens
-import 'auth_wrapper.dart'; // Import the new wrapper
+import 'auth_wrapper.dart';
 import 'splash_screen.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
@@ -37,6 +38,8 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        // THE FIX IS HERE: AuthService is now provided to the entire app.
+        Provider<AuthService>(create: (_) => AuthService()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => AppLockProvider()),
@@ -153,10 +156,8 @@ class BondNexApp extends StatelessWidget {
         ),
       ),
       
-      // The starting point of the app is now the SplashScreen.
       home: const SplashScreen(),
       
-      // The routes are defined for named navigation.
       routes: {
         '/login': (context) => const LoginScreen(),
         '/home': (context) => const HomePage(),
