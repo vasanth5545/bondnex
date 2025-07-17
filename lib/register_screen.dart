@@ -1,14 +1,16 @@
 // File: lib/register_screen.dart
-// Handles new user registration using Firebase and prepares for the verification step.
+// This is the new, dedicated screen for user registration.
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
-// Import the screen that will handle the verification process.
-import 'email_verification_screen.dart'; 
-import 'providers/user_provider.dart';
+import 'services/auth_service.dart';
+import 'email_verification_screen.dart';
+
+// Enum for gender selection for better type safety
+enum Gender { boy, girl }
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -18,17 +20,14 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  // Controllers to manage text field input
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  
-  // Form key for validation
   final _formKey = GlobalKey<FormState>();
 
-  // State variables
   bool _isLoading = false;
+  Gender? _selectedGender;
 
   @override
   void dispose() {
@@ -39,82 +38,72 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  /// Handles the initial registration process.
   Future<void> _handleRegister() async {
-    // First, validate the form fields.
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    if (_selectedGender == null) {
+      _showErrorSnackBar('Please select a gender.');
       return;
     }
 
     setState(() => _isLoading = true);
 
+    final authService = Provider.of<AuthService>(context, listen: false);
+
     try {
-      // 1. Create the user with Firebase Authentication.
-      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      final User? user = await authService.registerWithEmailAndPassword(
+        _nameController.text.trim(),
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+        _selectedGender == Gender.boy ? 'boy' : 'girl',
       );
 
-      final user = credential.user;
-      if (user != null) {
-        // 2. Update the user's display name in Firebase.
-        await user.updateDisplayName(_nameController.text.trim());
-
-        // 3. Send the verification email.
-        await user.sendEmailVerification();
-
-        // Show a success message to the user.
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Registration successful! A verification link has been sent to your email.'),
-            backgroundColor: Colors.green,
+      if (user != null && mounted) {
+        _showSuccessSnackBar('A verification link has been sent to your email.');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => EmailVerificationScreen(
+              name: _nameController.text.trim(),
+              email: user.email!,
+            ),
           ),
         );
-
-        // 4. Navigate to the verification screen.
-        // We pass the user's details which will be needed for the final PHP registration step.
-        if (mounted) {
-          Navigator.pushReplacement( // Use pushReplacement to prevent going back to register
-            context,
-            MaterialPageRoute(
-              builder: (context) => EmailVerificationScreen(
-                name: _nameController.text.trim(),
-                email: user.email!,
-              ),
-            ),
-          );
-        }
       }
-    } on FirebaseAuthException catch (e) {
-      // Handle Firebase-specific errors (e.g., email already in use).
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.message ?? 'An error occurred.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-    } catch (e) {
-      // Handle other potential errors.
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('An unexpected error occurred: $e'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+    } on Exception catch (e) {
+      _showErrorSnackBar(e.toString());
     } finally {
-      // Ensure the loading indicator is turned off.
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
   }
 
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
+  void _showSuccessSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: Colors.green),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Your existing UI build method for the registration screen.
-    // This is a simplified version. Use your existing UI.
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: const Text('Register'),
         centerTitle: true,
       ),
@@ -124,54 +113,99 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Text('Name', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                  validator: (value) => value == null || value.isEmpty ? 'Please enter your name' : null,
+                  decoration: const InputDecoration(hintText: 'Enter your name'),
+                  validator: (value) => (value == null || value.isEmpty) ? 'Please enter your name' : null,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
+                Text('Gender', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: _buildGenderChip(context, 'Boy', Gender.boy),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: _buildGenderChip(context, 'Girl', Gender.girl),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Text('Email', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email'),
-                  validator: (value) => value == null || !value.contains('@') ? 'Please enter a valid email' : null,
+                  decoration: const InputDecoration(hintText: 'Enter your email address'),
+                  validator: (value) => (value == null || !value.contains('@')) ? 'Please enter a valid email address' : null,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
+                Text('Password', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _passwordController,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Password'),
-                  validator: (value) => value == null || value.length < 6 ? 'Password must be at least 6 characters' : null,
+                  decoration: const InputDecoration(hintText: 'Enter your password'),
+                  validator: (value) => (value == null || value.length < 6) ? 'Password must be at least 6 characters' : null,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
+                Text('Confirm Password', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 8),
                 TextFormField(
                   controller: _confirmPasswordController,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: 'Confirm Password'),
+                  decoration: const InputDecoration(hintText: 'Confirm your password'),
                   validator: (value) {
-                    if (value != _passwordController.text) {
-                      return 'Passwords do not match';
-                    }
+                    if (value != _passwordController.text) return 'Passwords do not match';
                     return null;
                   },
                 ),
                 const SizedBox(height: 40),
                 _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : ElevatedButton(
-                      onPressed: _handleRegister,
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16)
+                    ? const Center(child: CircularProgressIndicator())
+                    : ElevatedButton(
+                        onPressed: _handleRegister,
+                        child: Text('Register', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
                       ),
-                      child: Text('Register', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
-                    ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildGenderChip(BuildContext context, String label, Gender gender) {
+    final bool isSelected = _selectedGender == gender;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (selected) {
+        if (selected) {
+          setState(() {
+            _selectedGender = gender;
+          });
+        }
+      },
+      labelStyle: TextStyle(
+        color: isSelected ? Theme.of(context).colorScheme.onPrimary : Theme.of(context).textTheme.bodyLarge?.color,
+      ),
+      selectedColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey.withOpacity(0.3),
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 12),
     );
   }
 }

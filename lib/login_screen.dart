@@ -1,5 +1,5 @@
 // File: lib/login_screen.dart
-// UPDATED: Added direct navigation to HomePage for testing purposes.
+// UPDATED: Refactored to remove registration logic and navigate to a separate RegisterScreen.
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,7 +8,8 @@ import 'package:provider/provider.dart';
 
 import 'services/auth_service.dart';
 import 'email_verification_screen.dart';
-import 'home_page.dart'; // Import HomePage
+import 'home_page.dart';
+import 'register_screen.dart'; // Import the new register screen
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,38 +19,20 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  late PageController _pageController;
   bool _isPasswordVisible = false;
   bool _isLoading = false;
 
   final _loginEmailController = TextEditingController();
   final _loginPasswordController = TextEditingController();
-  final _registerNameController = TextEditingController();
-  final _registerEmailController = TextEditingController();
-  final _registerPasswordController = TextEditingController();
-  final _registerConfirmPasswordController = TextEditingController();
   final _loginFormKey = GlobalKey<FormState>();
-  final _registerFormKey = GlobalKey<FormState>();
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-  }
 
   @override
   void dispose() {
-    _pageController.dispose();
     _loginEmailController.dispose();
     _loginPasswordController.dispose();
-    _registerNameController.dispose();
-    _registerEmailController.dispose();
-    _registerPasswordController.dispose();
-    _registerConfirmPasswordController.dispose();
     super.dispose();
   }
 
-  // --- REWRITTEN LOGIN LOGIC ---
   Future<void> _handleLogin() async {
     if (!_loginFormKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
@@ -62,16 +45,13 @@ class _LoginScreenState extends State<LoginScreen> {
         _loginPasswordController.text.trim(),
       );
 
-      // **THE FIX IS HERE**: Added direct navigation after successful login.
       if (user != null && mounted) {
         if (user.emailVerified) {
-          // If email is verified, navigate directly to HomePage
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (context) => const HomePage()),
             (Route<dynamic> route) => false,
           );
         } else {
-          // If email is not verified, show verification screen
           _showErrorSnackBar('Please verify your email before logging in.');
           Navigator.push(
             context,
@@ -93,41 +73,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- REWRITTEN REGISTER LOGIC ---
-  Future<void> _handleRegister() async {
-    if (!_registerFormKey.currentState!.validate()) return;
-    setState(() => _isLoading = true);
-    
-    final authService = Provider.of<AuthService>(context, listen: false);
-
-    try {
-      final User? user = await authService.registerWithEmailAndPassword(
-        _registerNameController.text.trim(),
-        _registerEmailController.text.trim(),
-        _registerPasswordController.text.trim(),
-      );
-
-      if (user != null && mounted) {
-        _showSuccessSnackBar('A verification link has been sent to your email.');
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => EmailVerificationScreen(
-              name: _registerNameController.text.trim(),
-              email: user.email!,
-            ),
-          ),
-        );
-      }
-    } on Exception catch (e) {
-      _showErrorSnackBar(e.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
   void _showErrorSnackBar(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -136,31 +81,8 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _showSuccessSnackBar(String message) {
-     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.green),
-      );
-    }
-  }
-
-  void _showRegisterPage() => _pageController.animateToPage(1, duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
-  void _showLoginPage() => _pageController.animateToPage(0, duration: const Duration(milliseconds: 400), curve: Curves.easeInOut);
-
-  // --- UI CODE (REMAINS THE SAME) ---
   @override
   Widget build(BuildContext context) {
-    return PageView(
-      controller: _pageController,
-      physics: const NeverScrollableScrollPhysics(),
-      children: [
-        _buildLoginWidget(),
-        _buildRegisterWidget(),
-      ],
-    );
-  }
-
-  Widget _buildLoginWidget() {
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
@@ -211,76 +133,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                 const SizedBox(height: 20),
                 TextButton(
-                  onPressed: _showRegisterPage,
+                  onPressed: () {
+                    // Navigate to the new RegisterScreen
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                    );
+                  },
                   child: Text('Register', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600)),
                 ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRegisterWidget() {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: _showLoginPage),
-        title: const Text('Register'),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-          child: Form(
-            key: _registerFormKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Name', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _registerNameController,
-                  decoration: const InputDecoration(hintText: 'Enter your name'),
-                  validator: (value) => (value == null || value.isEmpty) ? 'Please enter your name' : null,
-                ),
-                const SizedBox(height: 24),
-                Text('Email', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _registerEmailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(hintText: 'Enter your email address'),
-                  validator: (value) => (value == null || !value.contains('@')) ? 'Please enter a valid email address' : null,
-                ),
-                const SizedBox(height: 24),
-                Text('Password', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _registerPasswordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(hintText: 'Enter your password'),
-                  validator: (value) => (value == null || value.length < 6) ? 'Password must be at least 6 characters' : null,
-                ),
-                const SizedBox(height: 24),
-                Text('Confirm Password', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _registerConfirmPasswordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(hintText: 'Confirm your password'),
-                  validator: (value) {
-                    if (value != _registerPasswordController.text) return 'Passwords do not match';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 40),
-                _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : ElevatedButton(
-                        onPressed: _handleRegister,
-                        child: Text('Register', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
-                      ),
               ],
             ),
           ),

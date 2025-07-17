@@ -1,5 +1,5 @@
 // File: lib/services/firestore_service.dart
-// UPDATED: Added logic to link two users together.
+// UPDATED: Added function to log calls to a `call_history` collection.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -13,18 +13,19 @@ class FirestoreService {
     required String uid,
     required String name,
     required String email,
+    required String gender,
   }) async {
     await _db.collection('users').doc(uid).set({
       'uid': uid,
       'name': name,
       'email': email,
-      'partner_uid': null, // Partner UID is initially null
-      'created_at': FieldValue.serverTimestamp(), // Uses the server's time
+      'gender': gender, // Storing the gender in Firestore.
+      'partner_uid': null,
+      'created_at': FieldValue.serverTimestamp(),
     });
   }
 
-  /// **THE FIX IS HERE**: Links the current user with a partner in Firestore.
-  /// This is a transaction to ensure both users are updated together.
+  /// Links the current user with a partner in Firestore.
   Future<void> linkPartners({
     required String currentUserId,
     required String partnerId,
@@ -32,18 +33,37 @@ class FirestoreService {
     final currentUserRef = _db.collection('users').doc(currentUserId);
     final partnerRef = _db.collection('users').doc(partnerId);
 
-    // Use a transaction to safely update both documents.
     await _db.runTransaction((transaction) async {
       final partnerDoc = await transaction.get(partnerRef);
 
-      // Check if the partner ID actually exists in the database.
       if (!partnerDoc.exists) {
         throw Exception("Partner with this ID does not exist. Please check the ID and try again.");
       }
 
-      // Update both the current user's and the partner's documents.
       transaction.update(currentUserRef, {'partner_uid': partnerId});
       transaction.update(partnerRef, {'partner_uid': currentUserId});
+    });
+  }
+
+  //--- Call History ---
+
+  /// Adds a new call record to the call history.
+  Future<void> addCallToHistory({
+    required String callerUid,
+    required String receiverUid,
+    required String callType,
+    required String callMode,
+    required String status,
+    required double duration,
+  }) async {
+    await _db.collection('call_history').add({
+      'caller_uid': callerUid,
+      'receiver_uid': receiverUid,
+      'call_type': callType,
+      'call_mode': callMode,
+      'status': status,
+      'duration': duration,
+      'timestamp': FieldValue.serverTimestamp(),
     });
   }
 }

@@ -1,5 +1,5 @@
 // File: lib/services/auth_service.dart
-// Updated to integrate with FirestoreService. No more PHP/MySQL.
+// UPDATED: Added gender parameter to the registration method.
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -13,7 +13,7 @@ class AuthService {
   User? get currentUser => _firebaseAuth.currentUser;
 
   /// Handles user registration with Firebase Auth and creates a user record in Firestore.
-  Future<User?> registerWithEmailAndPassword(String name, String email, String password) async {
+  Future<User?> registerWithEmailAndPassword(String name, String email, String password, String gender) async {
     try {
       // 1. Create user in Firebase Auth
       UserCredential userCredential = await _firebaseAuth.createUserWithEmailAndPassword(
@@ -23,8 +23,8 @@ class AuthService {
       
       User? user = userCredential.user;
       if (user != null) {
-        // 2. Create user document in Firestore
-        await _firestoreService.createUser(uid: user.uid, name: name, email: email);
+        // 2. Create user document in Firestore, now including the gender.
+        await _firestoreService.createUser(uid: user.uid, name: name, email: email, gender: gender);
         
         // 3. Send verification email
         await user.sendEmailVerification();
