@@ -1,4 +1,5 @@
 // File: lib/screens/dashboard_screen.dart
+// UPDATED: Passed BuildContext to helper methods to resolve 'undefined context' error.
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -7,32 +8,36 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 import '../providers/user_provider.dart';
 
-class DashboardScreen extends StatefulWidget {
+class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
-
-  @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
-}
-
-class _DashboardScreenState extends State<DashboardScreen> {
-  bool _isPartnerConnectedForTesting = false;
 
   @override
   Widget build(BuildContext context) {
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
-        bool showCoupleView = userProvider.isPartnerConnected;
-
-        // For testing UI toggle, we override the real state.
-        // In production, you would remove this line.
-        showCoupleView = _isPartnerConnectedForTesting;
+        final bool isPartnerConnected = userProvider.isPartnerConnected;
 
         return Scaffold(
-          floatingActionButton: FloatingActionButton(
-            onPressed: () => setState(() => _isPartnerConnectedForTesting = !_isPartnerConnectedForTesting),
-            child: const Icon(Icons.sync),
-            tooltip: 'Toggle Test UI between Single/Couple',
-          ),
+          floatingActionButton: isPartnerConnected
+              ? FloatingActionButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Couple features coming soon!')),
+                    );
+                  },
+                  child: const Icon(Icons.favorite),
+                  tooltip: 'Couple Features',
+                )
+              : FloatingActionButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please link with a partner to enable this.')),
+                    );
+                  },
+                  backgroundColor: Colors.grey,
+                  child: const Icon(Icons.sync_disabled),
+                  tooltip: 'Link with a partner first',
+                ),
           appBar: AppBar(
             leading: Padding(
               padding: const EdgeInsets.all(8.0),
@@ -56,14 +61,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  showCoupleView
-                      ? _buildCoupleProfile(userProvider)
-                      : _buildSingleProfile(userProvider),
+                  isPartnerConnected
+                      // **THE FIX IS HERE**: Passing context to the helper methods
+                      ? _buildCoupleProfile(context, userProvider)
+                      : _buildSingleProfile(context, userProvider),
                   
                   const SizedBox(height: 30),
 
-                  if (showCoupleView) ...[
-                    _buildSectionTitle('Trust Score', '85/100'),
+                  if (isPartnerConnected) ...[
+                    _buildSectionTitle(context, 'Trust Score', '85/100'),
                     const SizedBox(height: 12),
                     LinearProgressIndicator(
                       value: 0.85,
@@ -75,9 +81,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 30),
                   ],
 
-                  showCoupleView
-                      ? _buildCoupleFeaturesGrid()
-                      : _buildSingleFeaturesGrid(),
+                  isPartnerConnected
+                      ? _buildCoupleFeaturesGrid(context)
+                      : _buildSingleFeaturesGrid(context),
                 ],
               ),
             ),
@@ -87,7 +93,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSingleProfile(UserProvider userProvider) {
+  // **THE FIX IS HERE**: Added BuildContext parameter
+  Widget _buildSingleProfile(BuildContext context, UserProvider userProvider) {
     return Column(
       children: [
         Stack(
@@ -140,7 +147,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
   
-  Widget _buildCoupleProfile(UserProvider userProvider) {
+  // **THE FIX IS HERE**: Added BuildContext parameter
+  Widget _buildCoupleProfile(BuildContext context, UserProvider userProvider) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
@@ -152,7 +160,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         const _ProfileWidget(
           isUser: false,
-          name: 'Partner Name',
+          name: 'Partner Name', // TODO: Fetch partner's name
           imageFile: null,
           showTrustLevel: true,
         ),
@@ -160,7 +168,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSingleFeaturesGrid() {
+  // **THE FIX IS HERE**: Added BuildContext parameter
+  Widget _buildSingleFeaturesGrid(BuildContext context) {
     return GridView.count(
       crossAxisCount: 2,
       shrinkWrap: true,
@@ -178,7 +187,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildCoupleFeaturesGrid() {
+  // **THE FIX IS HERE**: Added BuildContext parameter
+  Widget _buildCoupleFeaturesGrid(BuildContext context) {
     final List<Widget> features = [
       _FeatureButton(icon: FontAwesomeIcons.locationDot, label: 'Location', onTap: () {}, gradient: const LinearGradient(colors: [Color(0xFF43CEA2), Color(0xFF185A9D)])),
       const SizedBox(height: 16),
@@ -201,7 +211,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title, String value) {
+  // **THE FIX IS HERE**: Added BuildContext parameter
+  Widget _buildSectionTitle(BuildContext context, String title, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -247,7 +258,6 @@ class _ProfileWidget extends StatelessWidget {
   }
 }
 
-// **THE FIX IS HERE** - Updated Instagram Button with Modal Bottom Sheet
 class _InstagramProfileButton extends StatefulWidget {
   const _InstagramProfileButton();
 
@@ -260,7 +270,6 @@ class _InstagramProfileButtonState extends State<_InstagramProfileButton> {
 
   Future<void> _launchInstagram(String? username) async {
     if (username == null || username.isEmpty) {
-      // If no username, open the edit sheet
       _showEditBottomSheet(context, Provider.of<UserProvider>(context, listen: false));
       return;
     }
@@ -278,7 +287,7 @@ class _InstagramProfileButtonState extends State<_InstagramProfileButton> {
     
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Important for keyboard to not cover the sheet
+      isScrollControlled: true,
       builder: (context) {
         return Padding(
           padding: EdgeInsets.only(

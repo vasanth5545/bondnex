@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'home_page.dart'; // Import HomePage
 
 class EmailVerificationScreen extends StatefulWidget {
   final String name;
@@ -19,6 +20,7 @@ class EmailVerificationScreen extends StatefulWidget {
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   Timer? _timer;
+  bool isEmailVerified = false;
 
   @override
   void initState() {
@@ -41,8 +43,18 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     }
 
     await user.reload();
-    // The AuthWrapper's StreamBuilder will automatically detect the change
-    // in `emailVerified` status and rebuild, so we don't need to do anything here.
+    
+    // **THE FIX IS HERE**: After reloading, check the verification status.
+    // If it's verified, cancel the timer and navigate to the HomePage.
+    if (user.emailVerified) {
+      _timer?.cancel();
+      // Use pushAndRemoveUntil to clear the navigation stack, so the user
+      // can't go back to the login or verification screens.
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const HomePage()),
+        (Route<dynamic> route) => false,
+      );
+    }
   }
 
   @override

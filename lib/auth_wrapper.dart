@@ -15,29 +15,75 @@ class AuthWrapper extends StatelessWidget {
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
+        // Show a loading indicator while checking auth state
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(body: Center(child: CircularProgressIndicator()));
         }
 
+        // If a user is logged in
         if (snapshot.hasData) {
           final User user = snapshot.data!;
 
           // Check if the user's email is verified
           if (user.emailVerified) {
-            // If verified, load user data from Firestore
             final userProvider = Provider.of<UserProvider>(context, listen: false);
+            
+            // Use a FutureBuilder to load user data from Firestore
             return FutureBuilder(
               future: userProvider.loadUserDataFromFirestore(user),
               builder: (context, futureSnapshot) {
+                // While data is loading, show a progress indicator
                 if (futureSnapshot.connectionState == ConnectionState.waiting) {
                   return const Scaffold(body: Center(child: CircularProgressIndicator()));
                 }
-                // After data is loaded, navigate to HomePage
+
+                // **THE FIX IS HERE**: Handle and display specific errors during data loading
+                if (futureSnapshot.hasError) {
+                  // Print the detailed error to the debug console for more info
+                  print("AuthWrapper FutureBuilder Error: ${futureSnapshot.error}");
+                  
+                  return Scaffold(
+                    body: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline, color: Colors.red, size: 60),
+                            const SizedBox(height: 20),
+                            const Text(
+                              'Failed to Load User Data',
+                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 10),
+                            // Display the actual error message to the user
+                            Text(
+                              'Error: ${futureSnapshot.error}',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.redAccent),
+                            ),
+                            const SizedBox(height: 30),
+                            ElevatedButton(
+                              onPressed: () {
+                                // Allow the user to retry by rebuilding the FutureBuilder
+                                (context as Element).reassemble();
+                              },
+                              child: const Text('Retry'),
+                            )
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                // After data is successfully loaded, navigate to HomePage
                 return const HomePage();
               },
             );
           } else {
-            // If not verified, show the verification screen
+            // If email is not verified, show the verification screen
             return EmailVerificationScreen(name: user.displayName ?? '', email: user.email!);
           }
         }

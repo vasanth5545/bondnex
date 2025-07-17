@@ -4,8 +4,12 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/firestore_service.dart'; // Import FirestoreService
 
 class UserProvider extends ChangeNotifier {
+  // **THE FIX IS HERE**: Added FirestoreService instance
+  final FirestoreService _firestoreService = FirestoreService();
+
   // User's own details
   String _userName = "Your Name";
   File? _userImage;
@@ -19,6 +23,7 @@ class UserProvider extends ChangeNotifier {
   // Keys for SharedPreferences
   static const String _userNameKey = 'user_name';
   static const String _partnerIdKey = 'partner_id';
+  static const String _permanentIdKey = 'permanent_id';
 
   // Getters
   String get userName => _userName;
@@ -30,21 +35,21 @@ class UserProvider extends ChangeNotifier {
   bool get isPartnerConnected => _partnerId != null;
 
   UserProvider() {
-    // Initial load from storage can be done here if needed
+    _loadInitialDataFromStorage();
   }
 
-  /// Loads user data from local storage (for faster startup)
-  Future<void> loadUserFromStorage() async {
+  Future<void> _loadInitialDataFromStorage() async {
     final prefs = await SharedPreferences.getInstance();
+    _myPermanentId = prefs.getString(_permanentIdKey) ?? "";
     _userName = prefs.getString(_userNameKey) ?? "Your Name";
-    _partnerId = prefs.getString(_partnerIdKey);
+    _partnerId = prefs.getString(_partnerIdKey); // Also load partner ID on start
     notifyListeners();
   }
 
-  /// Saves user data to local storage
   Future<void> _saveUserToStorage() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_userNameKey, _userName);
+    await prefs.setString(_permanentIdKey, _myPermanentId);
     if (_partnerId != null) {
       await prefs.setString(_partnerIdKey, _partnerId!);
     } else {
@@ -52,34 +57,53 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  /// **CORRECTED**: Loads user data from Firestore and updates the provider state.
-  /// This is the main function to call after a user logs in.
   Future<void> loadUserDataFromFirestore(User fcmUser) async {
     try {
       final doc = await FirebaseFirestore.instance.collection('users').doc(fcmUser.uid).get();
       if (doc.exists) {
         final data = doc.data()!;
         _userName = data['name'] ?? 'No Name';
-        _myPermanentId = fcmUser.uid; // The user's UID is their permanent ID
-        _partnerId = data['partner_uid']; // Load partner UID from Firestore
+        _myPermanentId = fcmUser.uid;
+        _partnerId = data['partner_uid'];
         
-        // Save the latest data to local storage
         await _saveUserToStorage();
         
-        // Notify all listening widgets to rebuild with the new data
         notifyListeners();
+      } else {
+        throw Exception('User data not found in the database.');
       }
     } catch (e) {
       debugPrint("Error loading user data from Firestore: $e");
+      throw Exception('Failed to load user data. Please try again.');
     }
   }
 
-  /// Clears all user data on logout.
+  /// **THE FIX IS HERE**: New function to handle the full partner linking process.
+  Future<void> linkPartnerInFirestore(String partnerId) async {
+    // Prevent linking with oneself
+    if (partnerId == _myPermanentId) {
+      throw Exception("You cannot link with yourself.");
+    }
+    
+    // Call the service to update the database
+    await _firestoreService.linkPartners(
+      currentUserId: _myPermanentId,
+      partnerId: partnerId,
+    );
+
+    // Update local state after successful database update
+    _partnerId = partnerId;
+    await _saveUserToStorage();
+    notifyListeners();
+  }
+
   Future<void> clearUserData() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    _userName = "Your Name";
-    _myPermanentId = "";
+    await prefs.remove(_partnerIdKey);
+    // Keep user name and ID for better UX on re-login
+    // await prefs.remove(_userNameKey);
+    // await prefs.remove(_permanentIdKey);
+
     _partnerId = null;
     _userImage = null;
     _instagramUsername = null;
@@ -87,7 +111,6 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Other update functions remain the same
   void updateUserName(String newName) {
     _userName = newName;
     _saveUserToStorage();
@@ -99,12 +122,6 @@ class UserProvider extends ChangeNotifier {
     notifyListeners();
   }
   
-  void linkPartner(String newPartnerId) {
-    _partnerId = newPartnerId;
-    _saveUserToStorage();
-    notifyListeners();
-  }
-
   void disconnectPartner() {
     _partnerId = null;
     _saveUserToStorage();

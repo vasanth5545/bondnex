@@ -1,4 +1,5 @@
 // File: lib/screens/home_page.dart
+// UPDATED: Added loading state and error handling to the link partner screen.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -57,6 +58,8 @@ class LinkPartnerScreen extends StatefulWidget {
 
 class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
   final TextEditingController _partnerCodeController = TextEditingController();
+  // **THE FIX IS HERE**: Added loading state
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -64,9 +67,45 @@ class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
     super.dispose();
   }
 
+  // **THE FIX IS HERE**: New function to handle the link button press
+  Future<void> _onLinkPartner() async {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final partnerId = _partnerCodeController.text.trim();
+
+    if (partnerId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid partner code.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      await userProvider.linkPartnerInFirestore(partnerId);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Partner linked successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      _partnerCodeController.clear();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // **THE FIX IS HERE** - Using Consumer to get user's permanent ID
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
         final myPermanentIdController = TextEditingController(text: userProvider.myPermanentId);
@@ -83,9 +122,9 @@ class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Generate a unique partner code', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
+                  Text('Share Your Unique ID', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
-                  Text('Share this code with your partner to link your accounts.', style: GoogleFonts.poppins(color: Colors.grey[600])),
+                  Text('Share this ID with your partner so they can link with you.', style: GoogleFonts.poppins(color: Colors.grey[600])),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -123,24 +162,13 @@ class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
                     decoration: const InputDecoration(hintText: 'Enter code'),
                   ),
                   const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () {
-                      // **THE FIX IS HERE** - Linking logic
-                      if (_partnerCodeController.text.isNotEmpty) {
-                        userProvider.linkPartner(_partnerCodeController.text);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Partner linked successfully!')),
-                        );
-                        // Optionally navigate to dashboard or another screen
-                        // For now, it just updates the state.
-                      } else {
-                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please enter a valid partner code.')),
-                        );
-                      }
-                    },
-                    child: Text('Confirm', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
-                  ),
+                  // **THE FIX IS HERE**: Updated button to show loading indicator
+                  _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : ElevatedButton(
+                          onPressed: _onLinkPartner,
+                          child: Text('Confirm & Link', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+                        ),
                 ],
               ),
             ),

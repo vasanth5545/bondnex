@@ -1,5 +1,5 @@
 // File: lib/login_screen.dart
-// UPDATED: Login logic simplified. Navigation is now handled by AuthWrapper.
+// UPDATED: Added direct navigation to HomePage for testing purposes.
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'services/auth_service.dart';
 import 'email_verification_screen.dart';
+import 'home_page.dart'; // Import HomePage
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -61,23 +62,28 @@ class _LoginScreenState extends State<LoginScreen> {
         _loginPasswordController.text.trim(),
       );
 
-      // **THE FIX IS HERE**: No more manual navigation.
-      // AuthWrapper will detect the login and handle everything.
-      // We only need to check if the email is NOT verified to show the verification screen.
-      if (user != null && !user.emailVerified && mounted) {
-        _showErrorSnackBar('Please verify your email before logging in.');
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => EmailVerificationScreen(
-              name: user.displayName ?? '',
-              email: user.email!,
+      // **THE FIX IS HERE**: Added direct navigation after successful login.
+      if (user != null && mounted) {
+        if (user.emailVerified) {
+          // If email is verified, navigate directly to HomePage
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const HomePage()),
+            (Route<dynamic> route) => false,
+          );
+        } else {
+          // If email is not verified, show verification screen
+          _showErrorSnackBar('Please verify your email before logging in.');
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => EmailVerificationScreen(
+                name: user.displayName ?? '',
+                email: user.email!,
+              ),
             ),
-          ),
-        );
+          );
+        }
       }
-      // If login is successful, AuthWrapper will automatically navigate to HomePage.
-
     } on Exception catch (e) {
       _showErrorSnackBar(e.toString());
     } finally {
