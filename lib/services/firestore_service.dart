@@ -1,31 +1,69 @@
 // File: lib/services/firestore_service.dart
-// UPDATED: Added function to log calls to a `call_history` collection.
+// UPDATED: Added logic to generate and use a user-friendly "Premium ID".
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:math';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  //--- User Management ---
+  // **THE FIX IS HERE**: Helper function to generate the random Premium ID.
+  String _generatePremiumId() {
+    final random = Random();
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const digits = '0123456789';
 
-  /// Creates a new user document in Firestore after registration.
+    final randomChars = String.fromCharCodes(Iterable.generate(
+        4, (_) => chars.codeUnitAt(random.nextInt(chars.length))));
+    final randomDigits = String.fromCharCodes(Iterable.generate(
+        4, (_) => digits.codeUnitAt(random.nextInt(digits.length))));
+
+    return 'BNX-$randomChars-$randomDigits';
+  }
+
+  //--- User Management ---
   Future<void> createUser({
     required String uid,
     required String name,
     required String email,
     required String gender,
   }) async {
+    // **THE FIX IS HERE**: Generate and save the Premium ID for the new user.
+    final premiumId = _generatePremiumId();
     await _db.collection('users').doc(uid).set({
       'uid': uid,
+      'premium_id': premiumId, // The new user-facing ID
       'name': name,
       'email': email,
-      'gender': gender, // Storing the gender in Firestore.
+      'gender': gender,
       'partner_uid': null,
       'created_at': FieldValue.serverTimestamp(),
+      'profile_image_url': '',
     });
   }
 
-  /// Links the current user with a partner in Firestore.
+  Future<DocumentSnapshot> getUserData(String userId) {
+    return _db.collection('users').doc(userId).get();
+  }
+
+  // **THE FIX IS HERE**: New function to find a user's raw UID from their Premium ID.
+  Future<String?> getUidByPremiumId(String premiumId) async {
+    final querySnapshot = await _db
+        .collection('users')
+        .where('premium_id', isEqualTo: premiumId)
+        .limit(1)
+        .get();
+
+    if (querySnapshot.docs.isNotEmpty) {
+      return querySnapshot.docs.first.id;
+    }
+    return null;
+  }
+
+  Future<void> updateUserName(String uid, String newName) async {
+    await _db.collection('users').doc(uid).update({'name': newName});
+  }
+
   Future<void> linkPartners({
     required String currentUserId,
     required String partnerId,
@@ -35,35 +73,70 @@ class FirestoreService {
 
     await _db.runTransaction((transaction) async {
       final partnerDoc = await transaction.get(partnerRef);
-
       if (!partnerDoc.exists) {
-        throw Exception("Partner with this ID does not exist. Please check the ID and try again.");
+        throw Exception("Partner with this ID does not exist.");
       }
-
       transaction.update(currentUserRef, {'partner_uid': partnerId});
       transaction.update(partnerRef, {'partner_uid': currentUserId});
     });
   }
 
-  //--- Call History ---
-
-  /// Adds a new call record to the call history.
-  Future<void> addCallToHistory({
-    required String callerUid,
-    required String receiverUid,
-    required String callType,
-    required String callMode,
-    required String status,
-    required double duration,
+  Future<void> disconnectPartner({
+    required String currentUserId,
+    required String partnerId,
   }) async {
-    await _db.collection('call_history').add({
-      'caller_uid': callerUid,
+    final currentUserRef = _db.collection('users').doc(currentUserId);
+    final partnerRef = _db.collection('users').doc(partnerId);
+
+    await _db.runTransaction((transaction) async {
+      transaction.update(currentUserRef, {'partner_uid': null});
+      transaction.update(partnerRef, {'partner_uid': null});
+    });
+  }
+
+
+  //--- Love Request Management ---
+  Future<void> sendLoveRequest({
+    required String senderUid,
+    required String receiverUid,
+    required String senderName,
+    required String senderProfileImageUrl,
+  }) async {
+    final existingRequest = await _db
+        .collection('love_requests')
+        .where('sender_uid', isEqualTo: senderUid)
+        .where('receiver_uid', isEqualTo: receiverUid)
+        .where('status', isEqualTo: 'pending')
+        .get();
+
+    if (existingRequest.docs.isNotEmpty) {
+      throw Exception("You have already sent a request to this user.");
+    }
+
+    await _db.collection('love_requests').add({
+      'sender_uid': senderUid,
       'receiver_uid': receiverUid,
-      'call_type': callType,
-      'call_mode': callMode,
-      'status': status,
-      'duration': duration,
+      'sender_name': senderName,
+      'sender_profile_image_url': senderProfileImageUrl,
+      'status': 'pending',
       'timestamp': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Stream<QuerySnapshot> getLoveRequests(String userId) {
+    return _db
+        .collection('love_requests')
+        .where('receiver_uid', isEqualTo: userId)
+        .where('status', isEqualTo: 'pending')
+        .snapshots();
+  }
+
+  Future<void> updateLoveRequestStatus({
+    required String requestId,
+    required String status,
+  }) async {
+    await _db.collection('love_requests').doc(requestId).update({
+      'status': status,
     });
   }
 }

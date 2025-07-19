@@ -1,4 +1,6 @@
 // File: lib/settings/change_name_screen.dart
+// UPDATED: The "Save" button now updates the name in Firestore and the UI.
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -12,35 +14,57 @@ class ChangeNameScreen extends StatefulWidget {
 }
 
 class _ChangeNameScreenState extends State<ChangeNameScreen> {
-  late TextEditingController _currentNameController;
   late TextEditingController _newNameController;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    // Get the current name from the provider when the screen loads
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    _currentNameController = TextEditingController(text: userProvider.userName);
     _newNameController = TextEditingController();
   }
 
   @override
   void dispose() {
-    _currentNameController.dispose();
     _newNameController.dispose();
     super.dispose();
   }
 
+  // **THE FIX IS HERE**: This function handles the save logic.
+  Future<void> _onSave() async {
+    if (_newNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a new name.')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+
+    try {
+      await userProvider.updateUserName(_newNameController.text);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Name updated successfully!')),
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Use a Consumer to rebuild the current name field when the name changes
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
-        // Update the controller text if it has changed in the provider
-        if (_currentNameController.text != userProvider.userName) {
-          _currentNameController.text = userProvider.userName;
-        }
-        
         return Scaffold(
           appBar: AppBar(
             leading: IconButton(
@@ -62,7 +86,7 @@ class _ChangeNameScreenState extends State<ChangeNameScreen> {
                   ),
                   const SizedBox(height: 8),
                   TextField(
-                    controller: _currentNameController,
+                    controller: TextEditingController(text: userProvider.userName),
                     readOnly: true,
                     style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color?.withOpacity(0.6)),
                     decoration: InputDecoration(
@@ -95,41 +119,32 @@ class _ChangeNameScreenState extends State<ChangeNameScreen> {
 
                   const Spacer(),
 
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Theme.of(context).colorScheme.primary),
-                            minimumSize: const Size(0, 50),
-                          ),
-                          child: const Text('Cancel'),
+                  _isLoading
+                      ? const Center(child: CircularProgressIndicator())
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.of(context).pop(),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: Theme.of(context).colorScheme.primary),
+                                  minimumSize: const Size(0, 50),
+                                ),
+                                child: const Text('Cancel'),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: _onSave,
+                                style: ElevatedButton.styleFrom(
+                                   minimumSize: const Size(0, 50),
+                                ),
+                                child: const Text('Save'),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            // **THE FIX IS HERE** - Update name using the provider
-                            if (_newNameController.text.isNotEmpty) {
-                              userProvider.updateUserName(_newNameController.text);
-                              // Optionally, show a success message
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Name updated successfully!')),
-                              );
-                              // Clear the new name field after saving
-                              _newNameController.clear();
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                             minimumSize: const Size(0, 50),
-                          ),
-                          child: const Text('Save'),
-                        ),
-                      ),
-                    ],
-                  ),
                 ],
               ),
             ),

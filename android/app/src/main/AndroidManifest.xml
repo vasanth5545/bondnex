@@ -17,8 +17,20 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
-    <!-- Permission for Contacts (Panic Button) -->
+    <!-- Permission for Contacts (Panic Button & Dialer) -->
     <uses-permission android:name="android.permission.READ_CONTACTS"/>
+
+    <!-- **THE FIX IS HERE**: Dialer-ku thevaiyaana puthu permissions -->
+    <!-- SIM call panna -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <!-- VOIP call-ku kural pathivu seiya -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- VOIP-ku audio settings-ah maathurathukku -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- VOIP-ku Bluetooth headset use panna -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <!-- Call pohumpothu screen off aagama irukka -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     
     <application
         android:label="bondnex"
@@ -57,6 +69,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- **THE FIX IS HERE**: SIM call panna thevaiyaana query -->
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
         </intent>
     </queries>
 </manifest>

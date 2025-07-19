@@ -1,13 +1,14 @@
 // File: lib/screens/home_page.dart
-// UPDATED: Added loading state and error handling to the link partner screen.
+// UPDATED: Chat icon-ku pathila Phone icon maathiyachu, matrum PhoneScreen-ku navigate aagum.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
 import 'dashboard_screen.dart';
-import 'chat_list_screen.dart';
-import 'notification_screen.dart';
+import 'phone_screen.dart'; // Puthu phone_screen.dart import panniyachu
+import 'activity_screen.dart';
+import '../services/firestore_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -19,10 +20,11 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
 
+  // **THE FIX IS HERE**: ChatListScreen-ku pathila PhoneScreen use pannurom.
   final List<Widget> _pages = const [
     LinkPartnerScreen(),
-    ChatListScreen(),
-    NotificationScreen(),
+    PhoneScreen(),
+    ActivityScreen(),
     DashboardScreen(),
   ];
 
@@ -34,10 +36,11 @@ class _HomePageState extends State<HomePage> {
         children: _pages,
       ),
       bottomNavigationBar: BottomNavigationBar(
+        // **THE FIX IS HERE**: Chat icon-ah phone icon-a maathiyachu.
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble), label: 'Chat'),
-          BottomNavigationBarItem(icon: Icon(Icons.notifications_active), label: 'Activity'),
+          BottomNavigationBarItem(icon: Icon(Icons.phone), label: 'Call'),
+          BottomNavigationBarItem(icon: Icon(Icons.favorite_border), label: 'Activity'),
           BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
         ],
         currentIndex: _selectedIndex,
@@ -58,7 +61,6 @@ class LinkPartnerScreen extends StatefulWidget {
 
 class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
   final TextEditingController _partnerCodeController = TextEditingController();
-  // **THE FIX IS HERE**: Added loading state
   bool _isLoading = false;
 
   @override
@@ -67,12 +69,11 @@ class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
     super.dispose();
   }
 
-  // **THE FIX IS HERE**: New function to handle the link button press
-  Future<void> _onLinkPartner() async {
+  Future<void> _onSendRequest() async {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final partnerId = _partnerCodeController.text.trim();
+    final partnerPremiumId = _partnerCodeController.text.trim();
 
-    if (partnerId.isEmpty) {
+    if (partnerPremiumId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a valid partner code.')),
       );
@@ -82,10 +83,23 @@ class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
     setState(() => _isLoading = true);
 
     try {
-      await userProvider.linkPartnerInFirestore(partnerId);
+      final firestoreService = FirestoreService();
+      final partnerUid = await firestoreService.getUidByPremiumId(partnerPremiumId);
+
+      if (partnerUid == null) {
+        throw Exception("Partner with this ID was not found.");
+      }
+
+      await firestoreService.sendLoveRequest(
+        senderUid: userProvider.firebaseUid,
+        receiverUid: partnerUid,
+        senderName: userProvider.userName,
+        senderProfileImageUrl: userProvider.profileImageUrl ?? 'https://placehold.co/600x800/E91E63/FFFFFF?text=${userProvider.userName[0]}',
+      );
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Partner linked successfully!'),
+          content: Text('Love request sent successfully!'),
           backgroundColor: Colors.green,
         ),
       );
@@ -126,48 +140,35 @@ class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
                   const SizedBox(height: 8),
                   Text('Share this ID with your partner so they can link with you.', style: GoogleFonts.poppins(color: Colors.grey[600])),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: myPermanentIdController,
-                          readOnly: true,
-                          decoration: InputDecoration(
-                            labelText: 'Your Unique ID',
-                            suffixIcon: IconButton(
-                              icon: Icon(Icons.copy, color: Theme.of(context).iconTheme.color),
-                              onPressed: () {
-                                Clipboard.setData(ClipboardData(text: myPermanentIdController.text));
-                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Your ID copied!')));
-                              },
-                            ),
-                          ),
-                        ),
+                  TextField(
+                    controller: myPermanentIdController,
+                    readOnly: true,
+                    decoration: InputDecoration(
+                      labelText: 'Your Unique ID',
+                      suffixIcon: IconButton(
+                        icon: Icon(Icons.copy, color: Theme.of(context).iconTheme.color),
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: myPermanentIdController.text));
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Your ID copied!')));
+                        },
                       ),
-                      const SizedBox(width: 16),
-                      ElevatedButton(
-                        onPressed: () {},
-                        style: ElevatedButton.styleFrom(minimumSize: const Size(100, 50)),
-                        child: const Text('Share'),
-                      ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 40),
                   Text("Enter your partner's code", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
-                  Text('If your partner has already generated a code, enter it here.', style: GoogleFonts.poppins(color: Colors.grey[600])),
+                  Text("Enter your partner's ID here to send a love request.", style: GoogleFonts.poppins(color: Colors.grey[600])),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _partnerCodeController,
-                    decoration: const InputDecoration(hintText: 'Enter code'),
+                    decoration: const InputDecoration(hintText: "Enter partner's ID"),
                   ),
                   const SizedBox(height: 24),
-                  // **THE FIX IS HERE**: Updated button to show loading indicator
                   _isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : ElevatedButton(
-                          onPressed: _onLinkPartner,
-                          child: Text('Confirm & Link', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+                          onPressed: _onSendRequest,
+                          child: Text('Send Request', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
                         ),
                 ],
               ),

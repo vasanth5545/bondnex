@@ -1,5 +1,5 @@
 // File: lib/main.dart
-// UPDATED: Added AuthService to the MultiProvider list.
+// UPDATED: Reverted scaffoldBackgroundColor and AppBar theme to remove the gradient.
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,7 +11,7 @@ import 'firebase_options.dart';
 import 'providers/theme_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/app_lock_provider.dart';
-import 'services/auth_service.dart'; // Import the AuthService
+import 'services/auth_service.dart';
 
 // Screens
 import 'auth_wrapper.dart';
@@ -38,7 +38,6 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
-        // THE FIX IS HERE: AuthService is now provided to the entire app.
         Provider<AuthService>(create: (_) => AuthService()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => UserProvider()),
@@ -62,6 +61,7 @@ class BondNexApp extends StatelessWidget {
       themeMode: themeProvider.themeMode,
       theme: ThemeData(
         brightness: Brightness.light,
+        // **THE FIX IS HERE**: Restored original background color.
         scaffoldBackgroundColor: const Color(0xFFF5F5F7),
         primaryColor: Colors.blue,
         colorScheme: const ColorScheme.light(
@@ -70,6 +70,7 @@ class BondNexApp extends StatelessWidget {
           surface: Colors.white,
         ),
         appBarTheme: AppBarTheme(
+          // **THE FIX IS HERE**: Restored original AppBar theme.
           backgroundColor: const Color(0xFFF5F5F7),
           elevation: 0,
           iconTheme: const IconThemeData(color: Colors.black),
@@ -110,6 +111,7 @@ class BondNexApp extends StatelessWidget {
       ),
       darkTheme: ThemeData(
         brightness: Brightness.dark,
+        // **THE FIX IS HERE**: Restored original background color.
         scaffoldBackgroundColor: const Color(0xFF0A0E1A),
         primaryColor: const Color(0xFF007AFF),
         colorScheme: const ColorScheme.dark(
@@ -118,6 +120,7 @@ class BondNexApp extends StatelessWidget {
           surface: Color(0xFF1C2C44),
         ),
         appBarTheme: AppBarTheme(
+          // **THE FIX IS HERE**: Restored original AppBar theme.
           backgroundColor: Colors.transparent,
           elevation: 0,
           titleTextStyle: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 18),

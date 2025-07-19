@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Flutter Application 3</string>
+	<string>BondNex</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>flutter_application_3</string>
+	<string>bondnex</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -45,5 +45,18 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- **THE FIX IS HERE**: VOIP call-ku thevaiyaana Microphone permission -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs access to the microphone to make VOIP calls.</string>
+    <!-- Profile photo-ku thevaiyaana permissions -->
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>This app needs access to your photo library to select a profile picture.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>This app needs access to your camera to take a profile picture.</string>
+    <!-- Contacts-ku thevaiyaana permission -->
+    <key>NSContactsUsageDescription</key>
+    <string>This app needs access to your contacts to set an emergency contact.</string>
+
 </dict>
 </plist>

@@ -1,4 +1,6 @@
 // File: lib/settings/account_settings_screen.dart
+// UPDATED: The "Disconnect" button now calls the fully functional provider method.
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -25,12 +27,20 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              userProvider.disconnectPartner();
-              Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Successfully disconnected from partner.')),
-              );
+            onPressed: () async {
+              // **THE FIX IS HERE**: Call the provider's disconnect method.
+              try {
+                await userProvider.disconnectPartner();
+                Navigator.of(context).pop(); // Close the dialog
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Successfully disconnected from partner.')),
+                );
+              } catch (e) {
+                Navigator.of(context).pop(); // Close the dialog
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: ${e.toString()}')),
+                );
+              }
             },
             child: const Text('Disconnect'),
           ),
@@ -41,7 +51,6 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Use Consumer to get the latest state from the provider
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
         return Scaffold(
@@ -94,7 +103,6 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     );
   }
 
-  // Widget to show when a partner is connected
   Widget _buildConnectedView(UserProvider userProvider) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),
@@ -131,7 +139,6 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     );
   }
 
-  // Widget to show when no partner is connected
   Widget _buildDisconnectedView(UserProvider userProvider) {
      return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0),

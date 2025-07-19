@@ -1,5 +1,5 @@
 // File: lib/screens/dashboard_screen.dart
-// UPDATED: Passed BuildContext to helper methods to resolve 'undefined context' error.
+// UPDATED: FloatingActionButton-ku thaniya oru heroTag koduthurukkom.
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +7,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 import '../providers/user_provider.dart';
+import 'notification_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -20,20 +21,16 @@ class DashboardScreen extends StatelessWidget {
         return Scaffold(
           floatingActionButton: isPartnerConnected
               ? FloatingActionButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Couple features coming soon!')),
-                    );
-                  },
+                  // **THE FIX IS HERE**: Thaniyaana heroTag add panniyachu.
+                  heroTag: 'dashboardFAB',
+                  onPressed: () {},
                   child: const Icon(Icons.favorite),
                   tooltip: 'Couple Features',
                 )
               : FloatingActionButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please link with a partner to enable this.')),
-                    );
-                  },
+                  // **THE FIX IS HERE**: Thaniyaana heroTag add panniyachu.
+                  heroTag: 'dashboardFAB_disabled',
+                  onPressed: () {},
                   backgroundColor: Colors.grey,
                   child: const Icon(Icons.sync_disabled),
                   tooltip: 'Link with a partner first',
@@ -42,13 +39,26 @@ class DashboardScreen extends StatelessWidget {
             leading: Padding(
               padding: const EdgeInsets.all(8.0),
               child: CircleAvatar(
-                backgroundImage: userProvider.userImage != null ? FileImage(userProvider.userImage!) : null,
-                child: userProvider.userImage == null ? const Icon(Icons.person) : null,
+                backgroundImage: userProvider.userImage != null
+                        ? FileImage(userProvider.userImage!)
+                        : null,
+                child: userProvider.userImage == null
+                    ? const Icon(Icons.person)
+                    : null,
               ),
             ),
             title: const Text('Dashboard'),
             centerTitle: true,
             actions: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                  );
+                },
+              ),
               IconButton(
                 icon: const Icon(Icons.settings),
                 onPressed: () => Navigator.pushNamed(context, '/settings'),
@@ -62,7 +72,6 @@ class DashboardScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   isPartnerConnected
-                      // **THE FIX IS HERE**: Passing context to the helper methods
                       ? _buildCoupleProfile(context, userProvider)
                       : _buildSingleProfile(context, userProvider),
                   
@@ -93,7 +102,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // **THE FIX IS HERE**: Added BuildContext parameter
   Widget _buildSingleProfile(BuildContext context, UserProvider userProvider) {
     return Column(
       children: [
@@ -128,7 +136,9 @@ class DashboardScreen extends StatelessWidget {
                 backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                 child: CircleAvatar(
                   radius: 50,
-                  backgroundImage: userProvider.userImage != null ? FileImage(userProvider.userImage!) : null,
+                  backgroundImage: userProvider.userImage != null
+                          ? FileImage(userProvider.userImage!)
+                          : null,
                   child: userProvider.userImage == null
                       ? Icon(
                           Icons.person,
@@ -147,28 +157,32 @@ class DashboardScreen extends StatelessWidget {
     );
   }
   
-  // **THE FIX IS HERE**: Added BuildContext parameter
   Widget _buildCoupleProfile(BuildContext context, UserProvider userProvider) {
+    final isBoy = userProvider.gender == 'boy';
+
+    final firstProfile = _ProfileWidget(
+      isUser: true,
+      name: userProvider.userName,
+      userImageFile: userProvider.userImage,
+      showTrustLevel: true,
+    );
+
+    final secondProfile = _ProfileWidget(
+      isUser: false,
+      name: userProvider.partnerName ?? 'Partner',
+      imageUrl: userProvider.partnerProfileImageUrl,
+      showTrustLevel: true,
+    );
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
-        _ProfileWidget(
-          isUser: true,
-          name: userProvider.userName,
-          imageFile: userProvider.userImage,
-          showTrustLevel: true,
-        ),
-        const _ProfileWidget(
-          isUser: false,
-          name: 'Partner Name', // TODO: Fetch partner's name
-          imageFile: null,
-          showTrustLevel: true,
-        ),
+        isBoy ? firstProfile : secondProfile,
+        isBoy ? secondProfile : firstProfile,
       ],
     );
   }
 
-  // **THE FIX IS HERE**: Added BuildContext parameter
   Widget _buildSingleFeaturesGrid(BuildContext context) {
     return GridView.count(
       crossAxisCount: 2,
@@ -187,7 +201,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // **THE FIX IS HERE**: Added BuildContext parameter
   Widget _buildCoupleFeaturesGrid(BuildContext context) {
     final List<Widget> features = [
       _FeatureButton(icon: FontAwesomeIcons.locationDot, label: 'Location', onTap: () {}, gradient: const LinearGradient(colors: [Color(0xFF43CEA2), Color(0xFF185A9D)])),
@@ -211,7 +224,6 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // **THE FIX IS HERE**: Added BuildContext parameter
   Widget _buildSectionTitle(BuildContext context, String title, String value) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -226,21 +238,36 @@ class DashboardScreen extends StatelessWidget {
 class _ProfileWidget extends StatelessWidget {
   final String name;
   final bool isUser;
-  final File? imageFile;
+  final String? imageUrl;
+  final File? userImageFile;
   final bool showTrustLevel;
 
-  const _ProfileWidget({required this.name, required this.isUser, this.imageFile, required this.showTrustLevel});
+  const _ProfileWidget({
+    required this.name,
+    required this.isUser,
+    this.imageUrl,
+    this.userImageFile,
+    required this.showTrustLevel,
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    
+    ImageProvider? backgroundImage;
+    if (imageUrl != null && imageUrl!.isNotEmpty) {
+      backgroundImage = NetworkImage(imageUrl!);
+    } else if (userImageFile != null) {
+      backgroundImage = FileImage(userImageFile!);
+    }
+
     return Column(
       children: [
         CircleAvatar(
           radius: 50,
           backgroundColor: theme.colorScheme.surface,
-          backgroundImage: imageFile != null ? FileImage(imageFile!) : null,
-          child: imageFile == null
+          backgroundImage: backgroundImage,
+          child: backgroundImage == null
               ? Icon(
                   isUser ? Icons.person : Icons.favorite_border,
                   size: 50,

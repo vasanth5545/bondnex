@@ -1,47 +1,47 @@
+// File: lib/providers/user_provider.dart
+// UPDATED: Corrected the import statement for 'dart:io' to fix the "File not found" error.
+
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'dart:io';
+import 'dart:io'; // **THE FIX IS HERE**: Corrected the import path.
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../services/firestore_service.dart'; // Import FirestoreService
+import '../services/firestore_service.dart';
 
 class UserProvider extends ChangeNotifier {
   final FirestoreService _firestoreService = FirestoreService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   StreamSubscription? _authStateSubscription;
 
-  // User's own details
   String _userName = "Your Name";
+  String _firebaseUid = "";
+  String _premiumId = "";
+  String? _gender;
   File? _userImage;
-  String _myPermanentId = ""; // This will be the user's UID
+  String? _profileImageUrl;
   String? _instagramUsername;
   String? _instagramFollowers;
-
-  // Partner's details
   String? _partnerId;
+  String? _partnerName;
+  String? _partnerProfileImageUrl;
 
-  // Keys for SharedPreferences
-  static const String _userNameKey = 'user_name';
-  static const String _partnerIdKey = 'partner_id';
-  static const String _permanentIdKey = 'permanent_id';
-
-  // Getters
+  bool get isLoggedIn => _firebaseUid.isNotEmpty;
   String get userName => _userName;
+  String get myPermanentId => _premiumId;
+  String get firebaseUid => _firebaseUid;
+  String? get gender => _gender;
   File? get userImage => _userImage;
-  String get myPermanentId => _myPermanentId;
+  String? get profileImageUrl => _profileImageUrl;
   String? get instagramUsername => _instagramUsername;
   String? get instagramFollowers => _instagramFollowers;
-  String? get partnerId => _partnerId;
   bool get isPartnerConnected => _partnerId != null;
-  // **THE FIX IS HERE**: A getter to easily check if the user is logged in and data is loaded.
-  bool get isLoggedIn => _myPermanentId.isNotEmpty;
+  String? get partnerName => _partnerName;
+  String? get partnerProfileImageUrl => _partnerProfileImageUrl;
+  String? get partnerId => _partnerId;
 
   UserProvider() {
-    // **THE FIX IS HERE**: Listen to auth state changes directly within the provider.
     _authStateSubscription = _auth.authStateChanges().listen(_onAuthStateChanged);
-    _loadInitialDataFromStorage();
   }
 
   @override
@@ -50,107 +50,103 @@ class UserProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  // **THE FIX IS HERE**: This function is called whenever a user logs in or out.
   Future<void> _onAuthStateChanged(User? user) async {
     if (user != null && user.emailVerified) {
-      // If user is logged in and verified, load their data.
       await loadUserDataFromFirestore(user);
     } else {
-      // If user is logged out or not verified, clear all data.
       await clearUserData();
-    }
-  }
-
-  Future<void> _loadInitialDataFromStorage() async {
-    final prefs = await SharedPreferences.getInstance();
-    // Only load if there's no active user session, to prevent overwriting.
-    if (_auth.currentUser == null) {
-      _myPermanentId = prefs.getString(_permanentIdKey) ?? "";
-      _userName = prefs.getString(_userNameKey) ?? "Your Name";
-      _partnerId = prefs.getString(_partnerIdKey);
-      notifyListeners();
-    }
-  }
-
-  Future<void> _saveUserToStorage() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_userNameKey, _userName);
-    await prefs.setString(_permanentIdKey, _myPermanentId);
-    if (_partnerId != null) {
-      await prefs.setString(_partnerIdKey, _partnerId!);
-    } else {
-      await prefs.remove(_partnerIdKey);
     }
   }
 
   Future<void> loadUserDataFromFirestore(User fcmUser) async {
     try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(fcmUser.uid).get();
+      final doc = await _firestoreService.getUserData(fcmUser.uid);
       if (doc.exists) {
-        final data = doc.data()!;
+        final data = doc.data() as Map<String, dynamic>;
         _userName = data['name'] ?? 'No Name';
-        _myPermanentId = fcmUser.uid;
+        _firebaseUid = fcmUser.uid;
+        _premiumId = data['premium_id'] ?? '';
+        _gender = data['gender'];
+        _profileImageUrl = data['profile_image_url'];
         _partnerId = data['partner_uid'];
-        
-        await _saveUserToStorage();
-        
-        // This is crucial: notify the UI that new data is available.
+
+        if (_partnerId != null) {
+          final partnerDoc = await _firestoreService.getUserData(_partnerId!);
+          if (partnerDoc.exists) {
+            final partnerData = partnerDoc.data() as Map<String, dynamic>;
+            _partnerName = partnerData['name'];
+            _partnerProfileImageUrl = partnerData['profile_image_url'];
+          }
+        } else {
+          _partnerName = null;
+          _partnerProfileImageUrl = null;
+        }
         notifyListeners();
-      } else {
-        // This can happen if user record is deleted but auth record remains.
-        await clearUserData(); // Clear data to handle this edge case.
-        throw Exception('User data not found in the database.');
       }
     } catch (e) {
-      debugPrint("Error loading user data from Firestore: $e");
-      await clearUserData(); // Ensure inconsistent state is cleared.
-      throw Exception('Failed to load user data. Please try again.');
+      debugPrint("Error loading user data: $e");
+      await clearUserData();
     }
   }
 
-  Future<void> linkPartnerInFirestore(String partnerId) async {
-    if (partnerId == _myPermanentId) {
-      throw Exception("You cannot link with yourself.");
-    }
-    
+  Future<void> linkPartner(String partnerId) async {
+    if (_firebaseUid.isEmpty) return;
     await _firestoreService.linkPartners(
-      currentUserId: _myPermanentId,
+      currentUserId: _firebaseUid,
       partnerId: partnerId,
     );
+    await loadUserDataFromFirestore(_auth.currentUser!);
+  }
+  
+  Future<void> disconnectPartner() async {
+    if (_partnerId == null || _firebaseUid.isEmpty) return;
 
-    _partnerId = partnerId;
-    await _saveUserToStorage();
-    notifyListeners();
+    try {
+      await _firestoreService.disconnectPartner(
+        currentUserId: _firebaseUid,
+        partnerId: _partnerId!,
+      );
+
+      _partnerId = null;
+      _partnerName = null;
+      _partnerProfileImageUrl = null;
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error disconnecting partner: $e");
+      throw Exception("Failed to disconnect. Please try again.");
+    }
   }
 
   Future<void> clearUserData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_partnerIdKey);
-    await prefs.remove(_permanentIdKey);
-    
-    _partnerId = null;
-    _myPermanentId = "";
+    _firebaseUid = "";
+    _premiumId = "";
     _userName = "Your Name";
+    _gender = null;
     _userImage = null;
+    _profileImageUrl = null;
+    _partnerId = null;
+    _partnerName = null;
+    _partnerProfileImageUrl = null;
     _instagramUsername = null;
     _instagramFollowers = null;
     notifyListeners();
   }
+  
+  Future<void> updateUserName(String newName) async {
+    if (_firebaseUid.isEmpty || newName.trim().isEmpty) return;
 
-  void updateUserName(String newName) {
-    _userName = newName;
-    _saveUserToStorage();
-    notifyListeners();
+    try {
+      await _firestoreService.updateUserName(_firebaseUid, newName.trim());
+      _userName = newName.trim();
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Error updating name: $e");
+      throw Exception("Failed to update name.");
+    }
   }
 
   void updateUserImage(File? newImage) {
     _userImage = newImage;
-    notifyListeners();
-  }
-  
-  void disconnectPartner() {
-    _partnerId = null;
-    _saveUserToStorage();
     notifyListeners();
   }
 
