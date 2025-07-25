@@ -12,6 +12,21 @@ import '../contact_profile_screen.dart';
 import '../message_screen.dart';
 import 'package:flutter_contacts/flutter_contacts.dart' as fc;
 
+// MODIFIED: Intha function ippo ore oru color mattum tharum. Gradient illa.
+Color _getColorForContact(String name) {
+  final List<MaterialColor> materialColors = [
+    Colors.red, Colors.pink, Colors.purple, Colors.deepPurple,
+    Colors.indigo, Colors.blue, Colors.lightBlue, Colors.cyan,
+    Colors.teal, Colors.green, Colors.lightGreen,
+    Colors.amber, Colors.orange, Colors.deepOrange, Colors.brown,
+    Colors.blueGrey
+  ];
+  if (name.isEmpty) return Colors.grey;
+  // Peroda hash code vechi, list-la irundhu oru color-ah select pannum.
+  final int hashCode = name.hashCode;
+  return materialColors[hashCode % materialColors.length];
+}
+
 class CallLogTile extends StatelessWidget {
   final CallLogEntry log;
   const CallLogTile({super.key, required this.log});
@@ -89,6 +104,9 @@ class CallLogTile extends StatelessWidget {
 
         final titleText = _formatContactName(log.contact, displaySettings.sortOrder);
         final subtitleText = log.contact.phones.isNotEmpty ? "+91 ${log.contact.phones.first.number}" : "No number";
+        // MODIFIED: Ippo inga ore oru color thaan varum.
+        final avatarColor = _getColorForContact(titleText);
+        final avatarLetter = titleText.isNotEmpty ? titleText[0].toUpperCase() : '#';
 
         final listTile = ListTile(
           leading: GestureDetector(
@@ -100,8 +118,13 @@ class CallLogTile extends StatelessWidget {
                 ),
               );
             },
-            child: const CircleAvatar(
-              child: Icon(Icons.person),
+            // MODIFIED: CircleAvatar ippo gradient illama, ore color-la irukkum.
+            child: CircleAvatar(
+              backgroundColor: avatarColor,
+              backgroundImage: log.contact.photo != null ? MemoryImage(log.contact.photo!) : null,
+              child: (log.contact.photo == null)
+                  ? Text(avatarLetter, style: const TextStyle(color: Colors.white))
+                  : null,
             ),
           ),
           title: Text(

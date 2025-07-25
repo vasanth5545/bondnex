@@ -1,5 +1,6 @@
 // File: lib/services/firestore_service.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:call_log/call_log.dart' as plugin;
 import 'dart:math';
 import '../phone/call_log_model.dart';
 
@@ -19,7 +20,7 @@ class FirestoreService {
     return 'BNX-$randomChars-$randomDigits';
   }
 
-  //--- User Management ---
+  // --- User Management ---
   Future<void> createUser({
     required String uid,
     required String name,
@@ -96,7 +97,7 @@ class FirestoreService {
   }
 
 
-  //--- Love Request Management ---
+  // --- Love Request Management ---
   Future<void> sendLoveRequest({
     required String senderUid,
     required String receiverUid,
@@ -141,20 +142,35 @@ class FirestoreService {
     });
   }
 
-  //--- Call Log Management ---
-  Future<void> uploadCallLog(String userId, CallLogEntry log) async {
-    await _db
-        .collection('users')
-        .doc(userId)
-        .collection('call_logs')
-        .add(log.toFirestore());
+  // --- Call Log Management ---
+  Future<void> uploadCallLogs(String userId, List<CallLogEntry> logs) async {
+    final userCallLogCollection = _db.collection('users').doc(userId).collection('call_logs');
+    final WriteBatch batch = _db.batch();
+
+    for (final log in logs) {
+      final docRef = userCallLogCollection.doc(log.id);
+      batch.set(docRef, log.toFirestore());
+    }
+    await batch.commit();
   }
 
+  /// Gets a stream of all call logs for the partner.
   Stream<QuerySnapshot> getPartnerCallLogs(String partnerId) {
     return _db
         .collection('users')
         .doc(partnerId)
         .collection('call_logs')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
+  }
+
+  /// **NEW**: Gets a stream of call logs for a specific contact number for the partner.
+  Stream<QuerySnapshot> getPartnerCallLogsForNumber(String partnerId, String number) {
+    return _db
+        .collection('users')
+        .doc(partnerId)
+        .collection('call_logs')
+        .where('contactNumber', isEqualTo: number)
         .orderBy('timestamp', descending: true)
         .snapshots();
   }

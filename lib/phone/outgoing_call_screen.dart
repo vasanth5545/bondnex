@@ -41,8 +41,9 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen> {
   void _endCall() {
     final callLogProvider = Provider.of<CallLogProvider>(context, listen: false);
 
+    // This logic correctly creates a log entry. The provider handles the rest.
     final log = CallLogEntry(
-      id: Random().nextDouble().toString(), // Generate a unique ID
+      id: DateTime.now().millisecondsSinceEpoch.toString() + (widget.contact.phones.isNotEmpty ? widget.contact.phones.first.number : ''),
       contact: widget.contact,
       type: CallType.outgoing,
       timestamp: DateTime.now(),
@@ -54,7 +55,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen> {
 
     Navigator.pop(context);
   }
-  
+
   String _formatContactName(fc.Contact contact, NameSortOrder sortOrder) {
     if (contact.displayName.isEmpty) {
       return contact.phones.isNotEmpty ? contact.phones.first.number : 'Unknown';
@@ -71,7 +72,7 @@ class _OutgoingCallScreenState extends State<OutgoingCallScreen> {
     return Consumer<DisplaySettingsProvider>(
       builder: (context, displaySettings, child) {
         final contactName = _formatContactName(widget.contact, displaySettings.sortOrder);
-        
+
         return Scaffold(
           backgroundColor: Colors.black,
           body: SafeArea(

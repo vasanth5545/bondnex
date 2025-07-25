@@ -11,12 +11,9 @@ class ContactsProvider extends ChangeNotifier {
   bool get permissionDenied => _permissionDenied;
   bool get isLoading => _isLoading;
 
-  // **THE FIX IS HERE**: Removed the fetchContacts() call from the constructor.
-  // The contacts will now be fetched only when the contacts page is opened.
   ContactsProvider();
 
   Future<void> fetchContacts() async {
-    // Prevent multiple fetches at the same time
     if (_isLoading) return;
 
     _isLoading = true;
@@ -25,11 +22,15 @@ class ContactsProvider extends ChangeNotifier {
     try {
       if (await FlutterContacts.requestPermission()) {
         _permissionDenied = false;
-        // This is the heavy operation that was blocking the app startup
-        _contacts = await FlutterContacts.getContacts(withProperties: true);
+        // MODIFIED: Fetched contacts with photos and properties (like phone numbers)
+        // This ensures all data is available immediately for the UI, fixing the delay.
+        _contacts = await FlutterContacts.getContacts(
+          withProperties: true,
+          withPhoto: true,
+        );
       } else {
         _permissionDenied = true;
-        _contacts = []; // Clear contacts if permission is denied
+        _contacts = [];
       }
     } catch (e) {
       debugPrint("Error fetching contacts: $e");

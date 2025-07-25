@@ -17,15 +17,12 @@ class DatabaseHelper {
     return _database!;
   }
 
-  // **THE FIX IS HERE**: Renamed to be a public method for pre-initialization.
   Future<Database> initDatabase() async {
-    // Add a guard to prevent re-initialization
     if (_database != null) {
       return _database!;
     }
     final documentsDirectory = await getApplicationDocumentsDirectory();
     final path = join(documentsDirectory.path, 'bondnex.db');
-    // Set the static variable here.
     _database = await openDatabase(
       path,
       version: 1,
@@ -65,7 +62,21 @@ class DatabaseHelper {
       return CallLogEntry.fromDbMap(maps[i]);
     });
   }
-  
+
+  /// Fetches the single most recent call log from the database.
+  Future<CallLogEntry?> getLatestCallLog() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'call_logs',
+      orderBy: 'timestamp DESC',
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return CallLogEntry.fromDbMap(maps.first);
+    }
+    return null;
+  }
+
   Future<List<CallLogEntry>> getUnsyncedCallLogs() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query('call_logs', where: 'isSynced = 0');

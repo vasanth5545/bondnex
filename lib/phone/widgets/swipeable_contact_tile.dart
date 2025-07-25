@@ -8,6 +8,22 @@ import '../outgoing_call_screen.dart';
 import '../contact_profile_screen.dart';
 import '../message_screen.dart';
 
+// MODIFIED: Intha function ippo ore oru color mattum tharum. Gradient illa.
+Color _getColorForContact(String name) {
+  final List<MaterialColor> materialColors = [
+    Colors.red, Colors.pink, Colors.purple, Colors.deepPurple,
+    Colors.indigo, Colors.blue, Colors.lightBlue, Colors.cyan,
+    Colors.teal, Colors.green, Colors.lightGreen,
+    Colors.amber, Colors.orange, Colors.deepOrange, Colors.brown,
+    Colors.blueGrey
+  ];
+  if (name.isEmpty) return Colors.grey;
+  // Peroda hash code vechi, list-la irundhu oru color-ah select pannum.
+  final int hashCode = name.hashCode;
+  return materialColors[hashCode % materialColors.length];
+}
+
+
 class SwipeableContactTile extends StatefulWidget {
   final fc.Contact contact;
   const SwipeableContactTile({super.key, required this.contact});
@@ -18,7 +34,7 @@ class SwipeableContactTile extends StatefulWidget {
 
 class _SwipeableContactTileState extends State<SwipeableContactTile> {
   double _opacity = 1.0;
-  
+
   String _formatContactName(fc.Contact contact, NameSortOrder sortOrder) {
     if (contact.displayName.isEmpty) {
       return contact.phones.isNotEmpty ? contact.phones.first.number : 'Unknown';
@@ -33,6 +49,11 @@ class _SwipeableContactTileState extends State<SwipeableContactTile> {
   Widget build(BuildContext context) {
     return Consumer<DisplaySettingsProvider>(
       builder: (context, displaySettings, child) {
+        final displayName = _formatContactName(widget.contact, displaySettings.sortOrder);
+        // MODIFIED: Ippo inga ore oru color thaan varum.
+        final avatarColor = _getColorForContact(displayName);
+        final avatarLetter = displayName.isNotEmpty ? displayName[0].toUpperCase() : '#';
+
         return Dismissible(
           key: ValueKey(widget.contact.id),
           background: _buildSwipeAction(Alignment.centerLeft, Colors.green, Icons.call),
@@ -65,7 +86,7 @@ class _SwipeableContactTileState extends State<SwipeableContactTile> {
             setState(() {
               _opacity = 1.0;
             });
-            return false; // prevent actual delete
+            return false;
           },
           child: AnimatedOpacity(
             opacity: _opacity,
@@ -91,13 +112,18 @@ class _SwipeableContactTileState extends State<SwipeableContactTile> {
                       ),
                     );
                   },
-                  child: const CircleAvatar(
+                  // MODIFIED: CircleAvatar ippo gradient illama, ore color-la irukkum.
+                  child: CircleAvatar(
                     radius: 20,
-                    child: Icon(Icons.person, size: 20),
+                    backgroundColor: avatarColor,
+                    backgroundImage: widget.contact.photo != null ? MemoryImage(widget.contact.photo!) : null,
+                    child: (widget.contact.photo == null)
+                        ? Text(avatarLetter, style: const TextStyle(color: Colors.white))
+                        : null,
                   ),
                 ),
                 title: Text(
-                  _formatContactName(widget.contact, displaySettings.sortOrder),
+                  displayName,
                   style: GoogleFonts.poppins(
                     fontWeight: FontWeight.w500,
                     color: Colors.white,
