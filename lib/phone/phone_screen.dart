@@ -132,8 +132,22 @@ class _PhoneScreenState extends State<PhoneScreen> {
   }
 }
 
-class RecentCallsScreen extends StatelessWidget {
+class RecentCallsScreen extends StatefulWidget {
   const RecentCallsScreen({super.key});
+
+  @override
+  State<RecentCallsScreen> createState() => _RecentCallsScreenState();
+}
+
+class _RecentCallsScreenState extends State<RecentCallsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // **THE FIX IS HERE**: Load call logs only when this screen is initialized.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<CallLogProvider>(context, listen: false).loadCallLogs();
+    });
+  }
   
   List<CallLogEntry> _getUniqueRecentCalls(List<CallLogEntry> allLogs) {
     final Map<String, CallLogEntry> uniqueLogs = {};
@@ -151,7 +165,6 @@ class RecentCallsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final callLogProvider = Provider.of<CallLogProvider>(context);
-    final recentCalls = _getUniqueRecentCalls(callLogProvider.callLogs);
     
     void _showDialpad() {
       showModalBottomSheet(
@@ -171,48 +184,56 @@ class RecentCallsScreen extends StatelessWidget {
         child: Icon(MdiIcons.dialpad),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              children: [
-                _buildSearchBar(context),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const IncomingCallScreen(
-                          callerName: 'Olivia Bennett',
-                          callerNumber: '+1 (555) 987-6543',
-                        ),
+        child: callLogProvider.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    children: [
+                      _buildSearchBar(context),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const IncomingCallScreen(
+                                callerName: 'Olivia Bennett',
+                                callerNumber: '+1 (555) 987-6543',
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text('Simulate Incoming Call'),
+                        style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                Colors.green, // 🟢 Intha line add pannirukken
+                            foregroundColor:
+                                Colors.white, // 🟢 Intha line add pannirukken
+                          ),
                       ),
-                    );
-                  },
-                  child: const Text('Simulate Incoming Call'),
+                      const SizedBox(height: 24),
+                      _buildSectionHeader('Recent', context),
+                      if (callLogProvider.callLogs.isEmpty)
+                        const Center(child: Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Text("No recent calls", style: TextStyle(color: Colors.white70)),
+                        ))
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _getUniqueRecentCalls(callLogProvider.callLogs).length,
+                          itemBuilder: (context, index) {
+                            final log = _getUniqueRecentCalls(callLogProvider.callLogs)[index];
+                            return CallLogTile(log: log);
+                          },
+                        )
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 24),
-                _buildSectionHeader('Recent', context),
-                if (recentCalls.isEmpty)
-                  const Center(child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Text("No recent calls", style: TextStyle(color: Colors.white70)),
-                  ))
-                else
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: recentCalls.length,
-                    itemBuilder: (context, index) {
-                      final log = recentCalls[index];
-                      return CallLogTile(log: log);
-                    },
-                  )
-              ],
-            ),
-          ),
-        ),
+              ),
       ),
     );
   }
@@ -269,6 +290,12 @@ class _ContactsPageState extends State<ContactsPage> with WidgetsBindingObserver
       });
     });
     WidgetsBinding.instance.addObserver(this);
+    // **THE FIX IS HERE**: Fetch contacts when this page is initialized,
+    // not when the provider is created.
+    // Use addPostFrameCallback to ensure the provider is available.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<ContactsProvider>(context, listen: false).fetchContacts();
+    });
   }
 
   @override

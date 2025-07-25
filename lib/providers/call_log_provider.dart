@@ -12,26 +12,16 @@ class CallLogProvider extends ChangeNotifier {
   final FirestoreService _firestoreService = FirestoreService();
   List<CallLogEntry> _callLogs = [];
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  bool _isLoading = false;
+  bool _isInitialized = false;
 
   UserProvider _userProvider;
 
   List<CallLogEntry> get callLogs => _callLogs;
-
-  List<CallLogEntry> get uniqueRecentCallLogs {
-    final Map<String, CallLogEntry> uniqueLogs = {};
-    for (final log in _callLogs) {
-      final number = log.contact.phones.isNotEmpty 
-          ? log.contact.phones.first.number.replaceAll(RegExp(r'[^0-9]'), '') 
-          : log.contact.displayName;
-      if (number.isNotEmpty && !uniqueLogs.containsKey(number)) {
-        uniqueLogs[number] = log;
-      }
-    }
-    return uniqueLogs.values.toList();
-  }
+  bool get isLoading => _isLoading;
 
   CallLogProvider(this._userProvider) {
-    _loadCallLogs();
+    // _loadCallLogs(); // REMOVED: Don't load automatically
     _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
       if (results.contains(ConnectivityResult.mobile) || results.contains(ConnectivityResult.wifi)) {
         print("Network connection restored. Attempting to sync logs.");
@@ -51,14 +41,23 @@ class CallLogProvider extends ChangeNotifier {
     super.dispose();
   }
   
-  Future<void> _loadCallLogs() async {
+  // MODIFIED: Renamed from _loadCallLogs and made public
+  Future<void> loadCallLogs() async {
+    if (_isInitialized || _isLoading) return; // Prevent multiple loads
+    _isLoading = true;
+    notifyListeners();
+
     _callLogs = await _dbHelper.getCallLogs();
+    _isInitialized = true;
+    _isLoading = false;
     notifyListeners();
   }
 
   Future<void> addCallLog(CallLogEntry log) async {
     await _dbHelper.insertCallLog(log);
-    await _loadCallLogs();
+    // Instead of full reload, just add to the list to be faster
+    _callLogs.insert(0, log);
+    notifyListeners();
 
     if (_userProvider.isLoggedIn && _userProvider.callLogSharingEnabled) {
       await syncPendingCallLogs();
@@ -67,7 +66,9 @@ class CallLogProvider extends ChangeNotifier {
 
   Future<void> deleteCallLog(String logId) async {
     await _dbHelper.markAsDeleted(logId);
-    await _loadCallLogs();
+    // Instead of full reload, just remove from the list
+    _callLogs.removeWhere((log) => log.id == logId);
+    notifyListeners();
 
     if (_userProvider.isLoggedIn && _userProvider.callLogSharingEnabled) {
       await syncPendingCallLogs();
@@ -92,7 +93,7 @@ class CallLogProvider extends ChangeNotifier {
       final idsToUpdate = unsyncedLogs.map((log) => log.id).toList();
       await _dbHelper.markCallLogsAsSynced(idsToUpdate);
       
-      await _loadCallLogs();
+      // No need to call _loadCallLogs() as the local list is already updated.
       print("Successfully synced ${unsyncedLogs.length} call logs.");
     } catch (e) {
       print("Error syncing call logs: $e");

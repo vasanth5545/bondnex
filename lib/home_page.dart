@@ -36,16 +36,19 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
-      ),
+      body: IndexedStack(index: _selectedIndex, children: _pages),
       bottomNavigationBar: BottomNavigationBar(
         items: const <BottomNavigationBarItem>[
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.phone), label: 'Call'),
-          BottomNavigationBarItem(icon: Icon(Icons.favorite_border), label: 'Activity'),
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Dashboard'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.favorite),
+            label: 'Activity',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
         ],
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
@@ -88,7 +91,9 @@ class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
 
     try {
       final firestoreService = FirestoreService();
-      final partnerUid = await firestoreService.getUidByPremiumId(partnerPremiumId);
+      final partnerUid = await firestoreService.getUidByPremiumId(
+        partnerPremiumId,
+      );
 
       if (partnerUid == null) {
         throw Exception("Partner with this ID was not found.");
@@ -98,7 +103,9 @@ class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
         senderUid: userProvider.firebaseUid,
         receiverUid: partnerUid,
         senderName: userProvider.userName,
-        senderProfileImageUrl: userProvider.profileImageUrl ?? 'https://placehold.co/600x800/E91E63/FFFFFF?text=${userProvider.userName[0]}',
+        senderProfileImageUrl:
+            userProvider.profileImageUrl ??
+            'https://placehold.co/600x800/E91E63/FFFFFF?text=${userProvider.userName[0]}',
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -126,7 +133,9 @@ class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
   Widget build(BuildContext context) {
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
-        final myPermanentIdController = TextEditingController(text: userProvider.myPermanentId);
+        final myPermanentIdController = TextEditingController(
+          text: userProvider.myPermanentId,
+        );
 
         return Scaffold(
           appBar: AppBar(
@@ -136,13 +145,25 @@ class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
           ),
           body: SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24.0,
+                vertical: 16.0,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Share Your Unique ID', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
+                  Text(
+                    'Share Your Unique ID',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 8),
-                  Text('Share this ID with your partner so they can link with you.', style: GoogleFonts.poppins(color: Colors.grey[600])),
+                  Text(
+                    'Share this ID with your partner so they can link with you.',
+                    style: GoogleFonts.poppins(color: Colors.grey[600]),
+                  ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: myPermanentIdController,
@@ -150,29 +171,59 @@ class _LinkPartnerScreenState extends State<LinkPartnerScreen> {
                     decoration: InputDecoration(
                       labelText: 'Your Unique ID',
                       suffixIcon: IconButton(
-                        icon: Icon(Icons.copy, color: Theme.of(context).iconTheme.color),
+                        icon: Icon(
+                          Icons.copy,
+                          color: Theme.of(context).iconTheme.color,
+                        ),
                         onPressed: () {
-                          Clipboard.setData(ClipboardData(text: myPermanentIdController.text));
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Your ID copied!')));
+                          Clipboard.setData(
+                            ClipboardData(text: myPermanentIdController.text),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Your ID copied!')),
+                          );
                         },
                       ),
                     ),
                   ),
                   const SizedBox(height: 40),
-                  Text("Enter your partner's code", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600)),
+                  Text(
+                    "Enter your partner's code",
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 8),
-                  Text("Enter your partner's ID here to send a love request.", style: GoogleFonts.poppins(color: Colors.grey[600])),
+                  Text(
+                    "Enter your partner's ID here to send a love request.",
+                    style: GoogleFonts.poppins(color: Colors.grey[600]),
+                  ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _partnerCodeController,
-                    decoration: const InputDecoration(hintText: "Enter partner's ID"),
+                    decoration: const InputDecoration(
+                      hintText: "Enter partner's ID",
+                    ),
                   ),
                   const SizedBox(height: 24),
                   _isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : ElevatedButton(
                           onPressed: _onSendRequest,
-                          child: Text('Send Request', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                Colors.green, // 🟢 Intha line add pannirukken
+                            foregroundColor:
+                                Colors.white, // 🟢 Intha line add pannirukken
+                          ),
+                          child: Text(
+                            'Send Request',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                 ],
               ),

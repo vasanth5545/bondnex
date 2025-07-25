@@ -1,11 +1,12 @@
 // File: lib/settings_screen.dart
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'providers/theme_provider.dart';
+// CORRECTED: Imported the correct ThemeProvider for state management
+import 'providers/theme_provider.dart'; 
 import 'providers/user_provider.dart';
+import 'providers/app_colors.dart'; // For theme-aware colors
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,7 +16,8 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _notificationSwitch = false;
+  // These can be managed by their own providers if they become more complex
+  bool _notificationSwitch = true;
   bool _locationSwitch = false;
 
   Future<void> _handleLogout() async {
@@ -35,7 +37,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error logging out: ${e.toString()}')),
+          SnackBar(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            content: Text('Error logging out: ${e.toString()}'),
+          ),
         );
       }
     }
@@ -43,7 +48,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // CORRECTED: Getting the instance of the correct ThemeProvider
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final theme = Theme.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -59,44 +66,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildSectionHeader('Account'),
+              _buildSectionHeader('Account', theme),
               _buildSettingsTile(
-                icon: Icons.settings_outlined,
+                context: context,
+                icon: Icons.person_outline,
                 title: 'Account Settings',
                 subtitle: 'Manage your account details',
                 onTap: () => Navigator.pushNamed(context, '/account_settings'),
               ),
               _buildSettingsTile(
-                icon: Icons.person_outline,
-                title: 'Change Name',
-                onTap: () => Navigator.pushNamed(context, '/change_name'),
-              ),
-              _buildSettingsTile(
-                icon: Icons.photo_camera_back_outlined,
-                title: 'Profile Photo',
-                onTap: () => Navigator.pushNamed(context, '/profile_photo'),
-              ),
-              _buildSettingsTile(
+                context: context,
                 icon: Icons.lock_outline,
                 title: 'Password',
+                subtitle: 'Change your login password',
                 onTap: () => Navigator.pushNamed(context, '/password'),
               ),
               const Divider(indent: 24, endIndent: 24),
 
-              _buildSectionHeader('Appearance'),
+              _buildSectionHeader('Appearance', theme),
               _buildSwitchTile(
-                icon: Icons.brightness_6_outlined,
+                context: context,
+                icon: theme.brightness == Brightness.dark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
                 title: 'Dark Mode',
                 subtitle: 'Switch between light and dark theme',
                 value: themeProvider.themeMode == ThemeMode.dark,
                 onChanged: (value) {
-                  themeProvider.toggleTheme(value);
+                  // CORRECTED: Using the correct method to change the theme
+                  themeProvider.setThemeMode(value ? ThemeMode.dark : ThemeMode.light);
                 },
               ),
               const Divider(indent: 24, endIndent: 24),
 
-              _buildSectionHeader('Permissions'),
+              _buildSectionHeader('Permissions', theme),
               _buildSwitchTile(
+                context: context,
                 icon: Icons.notifications_outlined,
                 title: 'Notification Settings',
                 subtitle: 'Enable/Disable push notifications',
@@ -104,6 +107,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (value) => setState(() => _notificationSwitch = value),
               ),
               _buildSwitchTile(
+                context: context,
                 icon: Icons.location_on_outlined,
                 title: 'Location Settings',
                 subtitle: 'Enable/Disable live location sharing',
@@ -111,6 +115,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onChanged: (value) => setState(() => _locationSwitch = value),
               ),
               _buildSettingsTile(
+                context: context,
                 icon: Icons.data_usage_outlined,
                 title: 'Usage Access',
                 subtitle: 'Manage Usage Stats permission',
@@ -118,27 +123,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
               const Divider(indent: 24, endIndent: 24),
 
-              _buildSectionHeader('Security'),
+              _buildSectionHeader('Security', theme),
               _buildSettingsTile(
+                context: context,
                 icon: Icons.phone_android_outlined,
                 title: 'Panic Button Settings',
-                subtitle: 'Setup or update your emergency contact',
+                subtitle: 'Setup your emergency contact',
                 onTap: () => Navigator.pushNamed(context, '/panic_button_settings'),
               ),
               _buildSettingsTile(
+                context: context,
                 icon: Icons.phonelink_lock_outlined,
                 title: 'Uninstall Lock',
-                subtitle: 'Manage or change your OTP Uninstall Lock',
+                subtitle: 'Prevent unauthorized uninstallation',
                 onTap: () => Navigator.pushNamed(context, '/uninstall_lock'),
               ),
-              _buildSettingsTile(icon: Icons.visibility_outlined, title: 'View current lock status', onTap: () {}),
               const Divider(indent: 24, endIndent: 24),
 
-              _buildSectionHeader('Support'),
-              _buildSettingsTile(icon: Icons.help_outline, title: 'FAQ section', onTap: () {}),
-              _buildSettingsTile(icon: Icons.headset_mic_outlined, title: 'Contact Support', onTap: () {}),
+              _buildSectionHeader('Support', theme),
+              _buildSettingsTile(context: context, icon: Icons.help_outline, title: 'FAQ section', onTap: () {}),
+              _buildSettingsTile(context: context, icon: Icons.headset_mic_outlined, title: 'Contact Support', onTap: () {}),
 
+              // Logout Tile
               _buildSettingsTile(
+                context: context,
                 icon: Icons.logout,
                 title: 'Logout',
                 isLogout: true,
@@ -146,7 +154,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
 
               const SizedBox(height: 20),
-              Center(child: Text('Version 1.0.0', style: GoogleFonts.poppins(color: Colors.grey[600]))),
+              Center(child: Text('Version 1.0.0', style: theme.textTheme.bodySmall)),
               const SizedBox(height: 20),
             ],
           ),
@@ -155,13 +163,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _buildSectionHeader(String title, ThemeData theme) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
       child: Text(
         title.toUpperCase(),
-        style: GoogleFonts.poppins(
-          color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6),
+        style: theme.textTheme.labelMedium?.copyWith(
           fontWeight: FontWeight.bold,
           letterSpacing: 1.1,
         ),
@@ -170,49 +177,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildSettingsTile({
+    required BuildContext context,
     required IconData icon,
     required String title,
     String? subtitle,
     required VoidCallback onTap,
     bool isLogout = false,
   }) {
+    final theme = Theme.of(context);
+    final color = isLogout ? theme.colorScheme.error : theme.iconTheme.color;
+
     return ListTile(
-      leading: Icon(icon, color: isLogout ? Colors.redAccent : null),
+      leading: Icon(icon, color: color),
       title: Text(
         title,
-        style: GoogleFonts.poppins(fontWeight: FontWeight.w500, color: isLogout ? Colors.redAccent : null),
+        style: theme.textTheme.bodyLarge?.copyWith(
+          fontWeight: FontWeight.w500,
+          color: color,
+        ),
       ),
       subtitle: subtitle != null
           ? Text(
               subtitle,
-              style: GoogleFonts.poppins(color: Colors.grey[500]),
+              style: theme.textTheme.bodySmall,
             )
           : null,
-      trailing: isLogout ? null : const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+      trailing: isLogout ? null : Icon(Icons.arrow_forward_ios, size: 16, color: theme.iconTheme.color?.withOpacity(0.5)),
       onTap: onTap,
     );
   }
 
   Widget _buildSwitchTile({
+    required BuildContext context,
     required IconData icon,
     required String title,
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
+    final theme = Theme.of(context);
     return SwitchListTile(
-      secondary: Icon(icon),
+      secondary: Icon(icon, color: theme.iconTheme.color),
       title: Text(
         title,
-        style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
       ),
       subtitle: Text(
         subtitle,
-        style: GoogleFonts.poppins(color: Colors.grey[500]),
+        style: theme.textTheme.bodySmall,
       ),
       value: value,
       onChanged: onChanged,
-      activeColor: Colors.blue,
+      activeColor: AppColors.primaryGreen, // Using primary color for the switch
     );
   }
 }

@@ -44,12 +44,11 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
     await user.reload();
     
-    // **THE FIX IS HERE**: After reloading, check the verification status.
-    // If it's verified, cancel the timer and navigate to the HomePage.
+    // **THE FIX IS HERE**: Check if the widget is still mounted before using its context.
+    if (!mounted) return;
+
     if (user.emailVerified) {
       _timer?.cancel();
-      // Use pushAndRemoveUntil to clear the navigation stack, so the user
-      // can't go back to the login or verification screens.
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const HomePage()),
         (Route<dynamic> route) => false,

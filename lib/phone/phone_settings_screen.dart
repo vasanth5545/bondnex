@@ -2,7 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../providers/theme_provider.dart';
+import '../providers/theme_helper.dart';
 import 'display_options_screen.dart';
 
 class PhoneSettingsScreen extends StatelessWidget {
