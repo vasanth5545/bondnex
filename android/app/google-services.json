@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "545280202783",
+    "project_id": "bondnex-0002",
+    "storage_bucket": "bondnex-0002.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:545280202783:android:eab192ca0ce457df4c9d2a",
+        "android_client_info": {
+          "package_name": "com.example.bondnex"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "545280202783-eul31p3rsok1vcojbe5593fj488mmb08.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.bondnex",
+            "certificate_hash": "4119ea7a1a619830d585ec97e17ab266986282a9"
+          }
+        },
+        {
+          "client_id": "545280202783-ve0kiqor3fp6sem91agjhrr7bcpla7pr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD4krKzVjT0O9-bdnTU8KTHelbcw4Iq5Ew"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "545280202783-e8kcf38v44kra2rtd71q98lmghqcj818.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "545280202783-tcrm8csrb836oa8ktqugjn8tsse7fupm.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.bondnex"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
