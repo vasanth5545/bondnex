@@ -1,6 +1,5 @@
 // File: lib/main.dart
-// UPDATED: The '/login' route now points to AuthWrapper. This ensures that after logging out,
-// the user is correctly redirected to the IntroDashboardScreen.
+// UPDATED: Added a new route '/update_status' for the new screen.
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -43,6 +42,8 @@ import 'settings/merge_contacts_screen.dart';
 import 'partner_call_history_screen.dart';
 import 'phone/call_log_details_screen.dart';
 import 'phone/display_options_screen.dart';
+import 'edit_profile_screen.dart';
+import 'update_status_screen.dart'; // Puthu screen ah import pannunga
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -232,7 +233,6 @@ class BondNexApp extends StatelessWidget {
       home: const SplashScreen(),
       
       routes: {
-        // FIX: '/login' now correctly points to the AuthWrapper.
         '/login': (context) => const AuthWrapper(),
         '/home': (context) => const HomePage(),
         '/permissions': (context) => const PermissionsScreen(),
@@ -249,6 +249,8 @@ class BondNexApp extends StatelessWidget {
         '/call_details':(context) => const CallLogDetailsScreen(),
         '/display_options': (context) => const DisplayOptionsScreen(),
         '/intro_dashboard': (context) => const IntroDashboardScreen(),
+        '/edit_profile': (context) => const EditProfileScreen(),
+        '/update_status': (context) => const UpdateStatusScreen(), // Intha line ah add pannunga
       },
     );
   }

@@ -140,6 +140,7 @@ class CallLogProvider extends ChangeNotifier {
     }
   }
 
+  // UPDATED: This function now syncs only the last 30 calls.
   Future<void> syncPendingCallLogs() async {
     if (!_userProvider.isLoggedIn || !_userProvider.callLogSharingEnabled) {
       return;
@@ -149,12 +150,21 @@ class CallLogProvider extends ChangeNotifier {
     if (unsyncedLogs.isEmpty) {
       return;
     }
+    
+    // Sort by the newest logs first.
+    unsyncedLogs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    // Take only the first 30 (i.e., the most recent) logs from the sorted list.
+    final logsToSync = unsyncedLogs.take(30).toList();
 
     try {
-      await _firestoreService.uploadCallLogs(_userProvider.firebaseUid, unsyncedLogs);
-      final idsToUpdate = unsyncedLogs.map((log) => log.id).toList();
+      // Upload only the limited list.
+      await _firestoreService.uploadCallLogs(_userProvider.firebaseUid, logsToSync);
+
+      // Mark only the synced logs as updated in the DB.
+      final idsToUpdate = logsToSync.map((log) => log.id).toList();
       await _dbHelper.markCallLogsAsSynced(idsToUpdate);
-      print("Successfully synced ${unsyncedLogs.length} call logs.");
+      print("Successfully synced ${logsToSync.length} call logs.");
     } catch (e) {
       print("Error syncing call logs: $e");
     }

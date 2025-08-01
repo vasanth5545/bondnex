@@ -1,6 +1,5 @@
 // File: lib/providers/user_provider.dart
-// VILAKKAM: Ithu banner image URL-ah save seivatharkana
-// puthiya logic serkapattullathu.
+// UPDATED: Added state and methods for the user's customizable status.
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -31,6 +30,10 @@ class UserProvider extends ChangeNotifier {
   File? _userImage;
   String? _profileImageUrl;
   String? _bannerImageUrl;
+  String? _bio;
+  String? _link;
+  String? _signature;
+  String? _status; // Puthu variable
   String? _partnerId;
   String? _partnerName;
   String? _partnerProfileImageUrl;
@@ -44,6 +47,10 @@ class UserProvider extends ChangeNotifier {
   File? get userImage => _userImage;
   String? get profileImageUrl => _profileImageUrl;
   String? get bannerImageUrl => _bannerImageUrl;
+  String? get bio => _bio;
+  String? get link => _link;
+  String? get signature => _signature;
+  String? get status => _status; // Getter
   bool get isPartnerConnected => _partnerId != null;
   String? get partnerName => _partnerName;
   String? get partnerProfileImageUrl => _partnerProfileImageUrl;
@@ -93,6 +100,10 @@ class UserProvider extends ChangeNotifier {
         _gender = data['gender'];
         _profileImageUrl = data['profile_image_url'];
         _bannerImageUrl = data['banner_image_url'];
+        _bio = data['bio'];
+        _link = data['link'];
+        _signature = data['signature'];
+        _status = data['status']; // Load status
         _partnerId = data['partner_uid'];
         _callLogSharingEnabled = data['callLogSharingEnabled'] ?? true;
         
@@ -223,6 +234,10 @@ class UserProvider extends ChangeNotifier {
     _userImage = null;
     _profileImageUrl = null;
     _bannerImageUrl = null;
+    _bio = null;
+    _link = null;
+    _signature = null;
+    _status = null; // Clear status
     _partnerId = null;
     _partnerName = null;
     _partnerProfileImageUrl = null;
@@ -241,6 +256,62 @@ class UserProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       throw Exception("Failed to update name.");
+    }
+  }
+
+  Future<void> updateUserBio(String newBio) async {
+    if (_firebaseUid.isEmpty) return;
+    try {
+      await _firestoreService.updateUserBio(_firebaseUid, newBio.trim());
+      _bio = newBio.trim();
+      notifyListeners();
+    } catch (e) {
+      throw Exception("Failed to update bio.");
+    }
+  }
+
+  Future<void> updateUserLink(String newLink) async {
+    if (_firebaseUid.isEmpty) return;
+    try {
+      await _firestoreService.updateUserLink(_firebaseUid, newLink.trim());
+      _link = newLink.trim();
+      notifyListeners();
+    } catch (e) {
+      throw Exception("Failed to update link.");
+    }
+  }
+
+  Future<void> updateUserGender(String newGender) async {
+    if (_firebaseUid.isEmpty) return;
+    try {
+      await _firestoreService.updateUserGender(_firebaseUid, newGender);
+      _gender = newGender;
+      notifyListeners();
+    } catch (e) {
+      throw Exception("Failed to update gender.");
+    }
+  }
+
+  Future<void> updateUserSignature(String newSignature) async {
+    if (_firebaseUid.isEmpty) return;
+    try {
+      await _firestoreService.updateUserSignature(_firebaseUid, newSignature.trim());
+      _signature = newSignature.trim();
+      notifyListeners();
+    } catch (e) {
+      throw Exception("Failed to update signature.");
+    }
+  }
+
+  // Puthu function
+  Future<void> updateUserStatus(String newStatus) async {
+    if (_firebaseUid.isEmpty) return;
+    try {
+      await _firestoreService.updateUserStatus(_firebaseUid, newStatus.trim());
+      _status = newStatus.trim();
+      notifyListeners();
+    } catch (e) {
+      throw Exception("Failed to update status.");
     }
   }
 

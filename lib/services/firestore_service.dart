@@ -1,5 +1,5 @@
 // File: lib/services/firestore_service.dart
-// VILAKKAM: Ithu banner feature-kaana maatangal serkapattulla mulumaiyaana file.
+// UPDATED: Added 'status' field and a method to update it.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math';
@@ -39,6 +39,10 @@ class FirestoreService {
       'created_at': FieldValue.serverTimestamp(),
       'profile_image_url': '',
       'banner_image_url': '',
+      'bio': 'Add your bio here!',
+      'link': '',
+      'signature': 'Broken hero',
+      'status': "what's up?", // Puthu field
       'callLogSharingEnabled': true,
     });
   }
@@ -64,6 +68,27 @@ class FirestoreService {
     await _db.collection('users').doc(uid).update({'name': newName});
   }
   
+  Future<void> updateUserBio(String uid, String newBio) async {
+    await _db.collection('users').doc(uid).update({'bio': newBio});
+  }
+
+  Future<void> updateUserLink(String uid, String newLink) async {
+    await _db.collection('users').doc(uid).update({'link': newLink});
+  }
+
+  Future<void> updateUserGender(String uid, String newGender) async {
+    await _db.collection('users').doc(uid).update({'gender': newGender});
+  }
+  
+  Future<void> updateUserSignature(String uid, String newSignature) async {
+    await _db.collection('users').doc(uid).update({'signature': newSignature});
+  }
+
+  // Puthu function
+  Future<void> updateUserStatus(String uid, String newStatus) async {
+    await _db.collection('users').doc(uid).update({'status': newStatus});
+  }
+
   Future<void> updateUserProfilePhotoUrl(String uid, String photoUrl) async {
     await _db.collection('users').doc(uid).update({'profile_image_url': photoUrl});
   }

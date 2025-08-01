@@ -1,7 +1,7 @@
 // File: lib/dashboard_screen.dart
-// VILAKKAM: Unga puthiya animation rules-kaaga, controller logic sariyaaga
-// maati amaikapattullathu.
+// UPDATED: The status bubble now navigates to the new UpdateStatusScreen.
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -21,33 +21,71 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> with TickerProviderStateMixin {
+  // Animation controllers for Lottie files
   late final AnimationController _heartLottieController;
   late final AnimationController _lockLottieController;
   
+  // State for profile interactions
   bool _isLiked = false;
   int _likeCount = 100000;
   bool _isUploadingBanner = false;
 
+  // --- AppBar Animation ---
+  Timer? _animationTimer;
+  final List<String> _animatedTexts = [];
+  int _currentTextIndex = 0;
+  String _displayText = '';
+  bool _showAnimatedText = false;
+
   @override
   void initState() {
     super.initState();
-    _heartLottieController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    );
-
-    _lockLottieController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    );
+    _heartLottieController = AnimationController(vsync: this, duration: const Duration(seconds: 2));
+    _lockLottieController = AnimationController(vsync: this, duration: const Duration(seconds: 2));
     
-    // --- ITHU THAAN SARIYAANA LOGIC ---
     _lockLottieController.addStatusListener((status) {
-      // Animation mulusaa odi mudincha odane...
       if (status == AnimationStatus.completed) {
-        // Neradiyaaga 0-ku kondu varom (reverse illama)
         _lockLottieController.value = 0.35;
       }
+    });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setupAnimatedTexts();
+    });
+  }
+
+  void _setupAnimatedTexts() {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (userProvider.isLoggedIn) {
+      _animatedTexts.clear();
+      _animatedTexts.add(userProvider.signature ?? 'Broken hero');
+      _animatedTexts.add('dialer app');
+      _animatedTexts.add(userProvider.userName);
+      _startAnimationLoop();
+    }
+  }
+
+  void _startAnimationLoop() {
+    _animationTimer?.cancel();
+    _animationTimer = Timer.periodic(const Duration(seconds: 7), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      setState(() {
+        _displayText = _animatedTexts[_currentTextIndex];
+        _currentTextIndex = (_currentTextIndex + 1) % _animatedTexts.length;
+        _showAnimatedText = true;
+      });
+
+      Future.delayed(const Duration(seconds: 4), () {
+        if (mounted) {
+          setState(() {
+            _showAnimatedText = false;
+          });
+        }
+      });
     });
   }
 
@@ -55,6 +93,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
   void dispose() {
     _heartLottieController.dispose();
     _lockLottieController.dispose();
+    _animationTimer?.cancel();
     super.dispose();
   }
 
@@ -70,6 +109,58 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
         _isLiked = true;
       }
     });
+  }
+
+  void _showEditSignatureDialog(BuildContext context, UserProvider userProvider) {
+    final signatureController = TextEditingController(text: userProvider.signature ?? 'Broken hero');
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.grey[900],
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text('Edit Signature', style: GoogleFonts.poppins(color: Colors.white)),
+          content: TextField(
+            controller: signatureController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.grey[850],
+              hintText: 'Enter your signature',
+              hintStyle: TextStyle(color: Colors.grey[600]),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[700]!),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey[700]!),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.blueAccent, width: 1.5),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white70)),
+            ),
+            TextButton(
+              onPressed: () async {
+                if (signatureController.text.trim().isNotEmpty) {
+                  await userProvider.updateUserSignature(signatureController.text.trim());
+                }
+                Navigator.of(context).pop();
+              },
+              child: const Text('Save', style: TextStyle(color: Colors.blueAccent)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _pickAndUploadBanner() async {
@@ -152,34 +243,65 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
 
     return Scaffold(
       backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        titleSpacing: 0,
+        title: Stack(
+          alignment: Alignment.center,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16.0),
+                child: Text(
+                  'BondNex',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 800),
+              curve: Curves.easeInOutCubic,
+              left: _showAnimatedText ? (MediaQuery.of(context).size.width / 2) - (_displayText.length * 4.5) : 16.0,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 400),
+                opacity: _showAnimatedText ? 1.0 : 0.0,
+                child: Text(
+                  _displayText,
+                  style: GoogleFonts.pacifico(
+                    color: Colors.lightBlueAccent,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined, color: Colors.white),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationScreen()));
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined, color: Colors.white),
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const CircleAvatar(backgroundColor: Colors.transparent),
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.notifications_outlined, color: Colors.white),
-                        onPressed: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationScreen()));
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.settings_outlined, color: Colors.white),
-                        onPressed: () => Navigator.pushNamed(context, '/settings'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-
               Stack(
                 clipBehavior: Clip.none,
                 alignment: Alignment.center,
@@ -248,43 +370,57 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                       ],
                     ),
                   ),
+                  Positioned(
+                    bottom: 45,
+                    right: (MediaQuery.of(context).size.width / 2) + 15,
+                    child: _buildStatusBubble(context, userProvider),
+                  ),
                 ],
               ),
-              const SizedBox(height: 50),
+              const SizedBox(height: 60),
               
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const SizedBox(width: 13),
-                  _buildSocialStat(Icons.people_alt, "1K", Colors.green),
                   const SizedBox(width: 18),
-                  Column(
-                    children: [
-                      Text(
-                        userProvider.userName,
-                        style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            userProvider.myPermanentId,
-                            style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey[400]),
-                          ),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.visibility_outlined, color: Colors.grey, size: 18),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'add bio',
-                        style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600]),
-                      ),
-                    ],
+                  _buildSocialStat(Icons.people_alt, "1K", Colors.green),
+                  const SizedBox(width: 27),
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          userProvider.userName,
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                userProvider.myPermanentId,
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey[400]),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(Icons.visibility_outlined, color: Colors.grey, size: 18),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          userProvider.bio ?? 'add bio',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width:7),
+                  const SizedBox(width: 10),
                   GestureDetector(
                     onTap: _onLikeTapped,
                     child: _buildLottieStat(_formatCount(_likeCount)),
@@ -295,7 +431,9 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
 
               Row(
                 children: [
-                  Expanded(child: _buildActionButton('Edit profile', () {})),
+                  Expanded(child: _buildActionButton('Edit profile', () {
+                     Navigator.pushNamed(context, '/edit_profile');
+                  })),
                   const SizedBox(width: 16),
                   Expanded(
                     child: _buildActionButton('Account Setting', () {
@@ -334,7 +472,7 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                         onLoaded: (composition) {
                           _lockLottieController.duration = composition.duration;
                           _lockLottieController.animateTo(
-                            0.27, // 38 / 141 = ~0.27
+                            0.27,
                             duration: const Duration(milliseconds: 800),
                           );
                         },
@@ -351,9 +489,60 @@ class _DashboardScreenState extends State<DashboardScreen> with TickerProviderSt
                   ),
                 ),
               ),
+              GestureDetector(
+                onTap: () => _showEditSignatureDialog(context, userProvider),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24.0),
+                  child: Text(
+                    userProvider.signature ?? 'Broken hero',
+                    style: GoogleFonts.pacifico(
+                      color: Colors.white,
+                      fontSize: 22,
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // Puthu Widget
+  Widget _buildStatusBubble(BuildContext context, UserProvider userProvider) {
+    return GestureDetector(
+      onTap: () {
+        // Itha maathirukkom
+        Navigator.pushNamed(context, '/update_status');
+      },
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2C2C2E), // Dark bubble color
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              userProvider.status ?? "what's up?",
+              style: GoogleFonts.poppins(color: Colors.white, fontSize: 14),
+            ),
+          ),
+          Positioned(
+            bottom: -5,
+            left: 20,
+            child: Transform.rotate(
+              angle: 45 * 3.14159 / 180,
+              child: Container(
+                width: 10,
+                height: 10,
+                color: const Color(0xFF2C2C2E),
+              ),
+            ),
+          )
+        ],
       ),
     );
   }

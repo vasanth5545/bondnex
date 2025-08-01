@@ -23,6 +23,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
@@ -31,7 +32,8 @@
    <application
         android:label="bondnex"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -55,7 +57,6 @@
             </intent-filter>
         </activity>
 
-        <!-- *** THE FIX IS HERE *** -->
         <!-- Image Cropper ku thevayana puthu Activity ah inga serthirukkom -->
         <activity
             android:name="com.yalantis.ucrop.UCropActivity"

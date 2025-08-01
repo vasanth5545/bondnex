@@ -1,13 +1,14 @@
 // File: lib/private_gallery_screen.dart
-// VILAKKAM: Intha file-la, files add aanatha illaya enbathai sariyaaga
-// dashboard screen-ku solgira logic serkapattullathu.
+// UPDATED: Replaced the custom photo_manager picker with the simpler, native image_picker.
+// This resolves the permission issues and provides a more familiar user experience.
 
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart'; // Puthu package
 import 'package:path/path.dart' as p;
+import 'photo_view_screen.dart'; // Ithu theva padum
 
 class PrivateGalleryScreen extends StatefulWidget {
   const PrivateGalleryScreen({super.key});
@@ -16,100 +17,75 @@ class PrivateGalleryScreen extends StatefulWidget {
   State<PrivateGalleryScreen> createState() => _PrivateGalleryScreenState();
 }
 
-class _PrivateGalleryScreenState extends State<PrivateGalleryScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  
-  List<File> _photos = [];
-  List<File> _videos = [];
-  List<File> _audios = [];
-  List<File> _documents = [];
-
+class _PrivateGalleryScreenState extends State<PrivateGalleryScreen> {
+  List<File> _privateImages = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
-    _loadLocalFiles();
+    _fetchPrivateImages();
   }
 
-  @override
-  void dispose(){
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadLocalFiles() async {
-    setState(() => _isLoading = true);
-    final appDir = await getApplicationDocumentsDirectory();
-    
-    _photos = await _getFilesFromDirectory(Directory('${appDir.path}/private/photos'));
-    _videos = await _getFilesFromDirectory(Directory('${appDir.path}/private/videos'));
-    _audios = await _getFilesFromDirectory(Directory('${appDir.path}/private/audios'));
-    _documents = await _getFilesFromDirectory(Directory('${appDir.path}/private/documents'));
-
-    setState(() => _isLoading = false);
-  }
-
-  Future<List<File>> _getFilesFromDirectory(Directory dir) async {
-    if (await dir.exists()) {
-      final files = await dir.list().toList();
-      return files.whereType<File>().toList();
-    }
-    return [];
-  }
-
-  Future<void> _pickAndSaveFiles() async {
-    bool filesWereAdded = false;
+  Future<void> _fetchPrivateImages() async {
+    if (!mounted) return;
+    setState(() { _isLoading = true; });
     try {
-      final result = await FilePicker.platform.pickFiles(allowMultiple: true);
-      if (result == null || result.files.isEmpty) {
-        // User entha file-um select pannala
-        return;
-      };
+      final directory = await getApplicationDocumentsDirectory();
+      final privateFolderPath = '${directory.path}/private_gallery';
+      final privateFolder = Directory(privateFolderPath);
 
-      filesWereAdded = true; // User files select pannitaanga
-      final appDir = await getApplicationDocumentsDirectory();
+      if (await privateFolder.exists()) {
+        final files = privateFolder.listSync().whereType<File>().toList();
+        if (mounted) setState(() => _privateImages = files);
+      } else {
+        if (mounted) setState(() => _privateImages = []);
+      }
+    } catch (e) {
+      debugPrint("Error fetching private images: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+  
+  // --- ITHA MAATHIRUKKOM ---
+  Future<void> _pickAndSaveImages() async {
+    final picker = ImagePicker();
+    // Phone oda native gallery la irundhu multiple photos ah select panrom
+    final List<XFile> pickedFiles = await picker.pickMultiImage(imageQuality: 85);
 
-      for (final file in result.files) {
-        if (file.path == null) continue;
-        
-        final sourceFile = File(file.path!);
-        String fileType = p.extension(file.path!).toLowerCase();
-        String targetDir;
+    if (pickedFiles.isEmpty || !mounted) return;
 
-        if (['.jpg', '.jpeg', '.png', '.gif'].contains(fileType)) {
-          targetDir = 'photos';
-        } else if (['.mp4', '.mov', '.avi', '.mkv'].contains(fileType)) {
-          targetDir = 'videos';
-        } else if (['.mp3', '.wav', '.m4a'].contains(fileType)) {
-          targetDir = 'audios';
-        } else {
-          targetDir = 'documents';
-        }
+    setState(() => _isLoading = true);
 
-        final destinationDir = Directory('${appDir.path}/private/$targetDir');
-        if (!await destinationDir.exists()) {
-          await destinationDir.create(recursive: true);
-        }
-
-        final newPath = p.join(destinationDir.path, p.basename(file.path!));
-        await sourceFile.copy(newPath);
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final privateFolderPath = '${directory.path}/private_gallery';
+      final privateFolder = Directory(privateFolderPath);
+      if (!await privateFolder.exists()) {
+        await privateFolder.create(recursive: true);
       }
 
-      await _loadLocalFiles();
+      int successCount = 0;
+      for (var xFile in pickedFiles) {
+        final sourceFile = File(xFile.path);
+        final fileName = p.basename(xFile.path);
+        final newPath = '$privateFolderPath/$fileName';
+        await sourceFile.copy(newPath);
+        successCount++;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$successCount photos saved to private gallery!')),
+      );
 
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking files: ${e.toString()}'))
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save photos: $e')),
+      );
     } finally {
-      // Intha screen-ah close seiyum bodhu, files add aanatha illaya-nu solrom
-      if (mounted) {
-        Navigator.pop(context, filesWereAdded);
-      }
+      // Puthusa save panna photos ah kaatrathuku refresh panrom
+      _fetchPrivateImages();
     }
   }
 
@@ -118,40 +94,32 @@ class _PrivateGalleryScreenState extends State<PrivateGalleryScreen> with Single
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.grey[900],
+        backgroundColor: Colors.black,
         title: const Text('Private Gallery'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(icon: Icon(Icons.photo), text: 'Photos'),
-            Tab(icon: Icon(Icons.videocam), text: 'Videos'),
-            Tab(icon: Icon(Icons.audiotrack), text: 'Audio'),
-            Tab(icon: Icon(Icons.description), text: 'Documents'),
-          ],
-        ),
       ),
+      body: _buildBody(),
       floatingActionButton: FloatingActionButton(
-        onPressed: _pickAndSaveFiles,
-        child: const Icon(Icons.add),
+        onPressed: _pickAndSaveImages, // Function ah maathirukkom
+        backgroundColor: Colors.blueAccent,
+        child: const Icon(Icons.add_photo_alternate_outlined),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildFileGrid(_photos, isVideo: false),
-                _buildFileGrid(_videos, isVideo: true),
-                _buildFileList(_audios),
-                _buildFileList(_documents),
-              ],
-            ),
     );
   }
 
-  Widget _buildFileGrid(List<File> files, {required bool isVideo}) {
-    if (files.isEmpty) {
-      return Center(child: Text('No files found. Tap + to add.', style: TextStyle(color: Colors.grey[400])));
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
     }
+    if (_privateImages.isEmpty) {
+      return Center(
+        child: Text(
+          'No private photos.\nClick the + button to add from gallery.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.poppins(color: Colors.white54, fontSize: 16),
+        ),
+      );
+    }
+
     return GridView.builder(
       padding: const EdgeInsets.all(8.0),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -159,39 +127,23 @@ class _PrivateGalleryScreenState extends State<PrivateGalleryScreen> with Single
         crossAxisSpacing: 8.0,
         mainAxisSpacing: 8.0,
       ),
-      itemCount: files.length,
+      itemCount: _privateImages.length,
       itemBuilder: (context, index) {
-        final file = files[index];
-        return GridTile(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.file(file, fit: BoxFit.cover),
-              if (isVideo)
-                const Center(
-                  child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 40),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildFileList(List<File> files) {
-    if (files.isEmpty) {
-      return Center(child: Text('No files found. Tap + to add.', style: TextStyle(color: Colors.grey[400])));
-    }
-    return ListView.builder(
-      itemCount: files.length,
-      itemBuilder: (context, index) {
-        final file = files[index];
-        return ListTile(
-          leading: const Icon(Icons.insert_drive_file, color: Colors.white),
-          title: Text(
-            p.basename(file.path),
-            style: const TextStyle(color: Colors.white),
-            overflow: TextOverflow.ellipsis,
+        final file = _privateImages[index];
+        return GestureDetector(
+          onTap: () async {
+            final result = await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => PhotoViewScreen(imageFile: file)),
+            );
+            // PhotoViewScreen la irundhu photo delete aana, ingayum refresh panrom
+            if (result == true) {
+              _fetchPrivateImages();
+            }
+          },
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12.0),
+            child: Image.file(file, fit: BoxFit.cover),
           ),
         );
       },
