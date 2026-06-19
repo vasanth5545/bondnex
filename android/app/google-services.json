@@ -7,20 +7,12 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:545280202783:android:eab192ca0ce457df4c9d2a",
+        "mobilesdk_app_id": "1:545280202783:android:da72da7c0388968d4c9d2a",
         "android_client_info": {
-          "package_name": "com.example.bondnex"
+          "package_name": "com.bondnex.couple"
         }
       },
       "oauth_client": [
-        {
-          "client_id": "545280202783-eul31p3rsok1vcojbe5593fj488mmb08.apps.googleusercontent.com",
-          "client_type": 1,
-          "android_info": {
-            "package_name": "com.example.bondnex",
-            "certificate_hash": "4119ea7a1a619830d585ec97e17ab266986282a9"
-          }
-        },
         {
           "client_id": "545280202783-ve0kiqor3fp6sem91agjhrr7bcpla7pr.apps.googleusercontent.com",
           "client_type": 3
@@ -39,10 +31,10 @@
               "client_type": 3
             },
             {
-              "client_id": "545280202783-tcrm8csrb836oa8ktqugjn8tsse7fupm.apps.googleusercontent.com",
+              "client_id": "545280202783-svr6dq99b1ucrhvv297jrrmhe0tp86fv.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.example.bondnex"
+                "bundle_id": "com.bondnex.couple"
               }
             }
           ]

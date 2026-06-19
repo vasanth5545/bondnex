@@ -13,21 +13,36 @@ class ContactsProvider extends ChangeNotifier {
 
   ContactsProvider();
 
-  Future<void> fetchContacts() async {
+  DateTime? _lastFetchTime;
+
+  Future<void> fetchContacts({bool force = false}) async {
     if (_isLoading) return;
 
-    _isLoading = true;
-    notifyListeners();
+    final now = DateTime.now();
+    if (!force &&
+        _contacts.isNotEmpty &&
+        _lastFetchTime != null &&
+        now.difference(_lastFetchTime!).inSeconds < 15) {
+      return; // Throttling: Skip if fetched less than 15 seconds ago
+    }
+
+    // Only show loading spinner if we don't have contacts yet
+    final isBackgroundUpdate = _contacts.isNotEmpty;
+    if (!isBackgroundUpdate) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
       if (await FlutterContacts.requestPermission()) {
         _permissionDenied = false;
-        // MODIFIED: Fetched contacts with photos and properties (like phone numbers)
-        // This ensures all data is available immediately for the UI, fixing the delay.
-        _contacts = await FlutterContacts.getContacts(
+        // Fetch contacts without thumbnails for speed
+        final newContacts = await FlutterContacts.getContacts(
           withProperties: true,
-          withPhoto: true,
+          withThumbnail: true,
         );
+        _contacts = newContacts;
+        _lastFetchTime = DateTime.now();
       } else {
         _permissionDenied = true;
         _contacts = [];
@@ -35,9 +50,13 @@ class ContactsProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint("Error fetching contacts: $e");
       _permissionDenied = true;
-      _contacts = [];
+      if (!isBackgroundUpdate) {
+        _contacts = [];
+      }
     } finally {
-      _isLoading = false;
+      if (!isBackgroundUpdate) {
+        _isLoading = false;
+      }
       notifyListeners();
     }
   }

@@ -28,7 +28,7 @@ class ThemeProvider with ChangeNotifier {
   // Set and persist theme mode
   void setThemeMode(ThemeMode mode) async {
     if (_themeMode == mode) return;
-    
+
     _themeMode = mode;
     notifyListeners();
 

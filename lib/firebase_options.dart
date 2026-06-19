@@ -51,20 +51,21 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyD4krKzVjT0O9-bdnTU8KTHelbcw4Iq5Ew',
-    appId: '1:545280202783:android:eab192ca0ce457df4c9d2a',
+    appId: '1:545280202783:android:da72da7c0388968d4c9d2a',
     messagingSenderId: '545280202783',
     projectId: 'bondnex-0002',
     storageBucket: 'bondnex-0002.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyCKH0fW8qrGdvqmT1QcPbzXdmcjueV76NE',
-    appId: '1:545280202783:ios:ed85c4a06115169d4c9d2a',
+    appId: '1:545280202783:ios:20372ffc3ca5301b4c9d2a',
     messagingSenderId: '545280202783',
     projectId: 'bondnex-0002',
     storageBucket: 'bondnex-0002.firebasestorage.app',
-    androidClientId: '545280202783-eul31p3rsok1vcojbe5593fj488mmb08.apps.googleusercontent.com',
-    iosClientId: '545280202783-tcrm8csrb836oa8ktqugjn8tsse7fupm.apps.googleusercontent.com',
-    iosBundleId: 'com.example.bondnex',
+    androidClientId:
+        '545280202783-eul31p3rsok1vcojbe5593fj488mmb08.apps.googleusercontent.com',
+    iosClientId:
+        '545280202783-svr6dq99b1ucrhvv297jrrmhe0tp86fv.apps.googleusercontent.com',
+    iosBundleId: 'com.bondnex.couple',
   );
 }

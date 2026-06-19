@@ -7,10 +7,9 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
-import '../services/firestore_service.dart';
-import '../services/cloudinary_service.dart';
+
+import 'package:bondnex/services/database/firestore_service.dart';
+import 'package:bondnex/services/storage/cloudinary_service.dart';
 
 enum AuthStatus { checking, loggedIn, loggedOut }
 
@@ -37,8 +36,18 @@ class UserProvider extends ChangeNotifier {
   String? _partnerId;
   String? _partnerName;
   String? _partnerProfileImageUrl;
+  String? _partnerBannerImageUrl;
+  String? _partnerStatus;
+  String? _partnerPremiumId;
   bool _callLogSharingEnabled = true;
-
+  List<String> _galleryImages = [];
+  int _friendsCount = 0;
+  int _followingCount = 0;
+  int _likesCount = 0;
+  List<String> _friends = [];
+  List<String> _following = [];
+  List<String> _likedBy = [];
+  bool _isLikedByMe = false;
   bool get isLoggedIn => _authStatus == AuthStatus.loggedIn;
   String get userName => _userName;
   String get myPermanentId => _premiumId;
@@ -54,11 +63,23 @@ class UserProvider extends ChangeNotifier {
   bool get isPartnerConnected => _partnerId != null;
   String? get partnerName => _partnerName;
   String? get partnerProfileImageUrl => _partnerProfileImageUrl;
+  String? get partnerBannerImageUrl => _partnerBannerImageUrl;
+  String? get partnerStatus => _partnerStatus;
+  String? get partnerPremiumId => _partnerPremiumId;
   String? get partnerId => _partnerId;
   bool get callLogSharingEnabled => _callLogSharingEnabled;
-
+  List<String> get galleryImages => _galleryImages;
+  int get friendsCount => _friendsCount;
+  int get followingCount => _followingCount;
+  int get likesCount => _likesCount;
+  List<String> get friends => _friends;
+  List<String> get following => _following;
+  List<String> get likedBy => _likedBy;
+  bool get isLikedByMe => _isLikedByMe;
   UserProvider() {
-    _authStateSubscription = _auth.authStateChanges().listen(_onAuthStateChanged);
+    _authStateSubscription = _auth.authStateChanges().listen(
+      _onAuthStateChanged,
+    );
   }
 
   @override
@@ -69,6 +90,8 @@ class UserProvider extends ChangeNotifier {
 
   Future<void> _onAuthStateChanged(User? user) async {
     if (user != null && user.emailVerified) {
+      _authStatus = AuthStatus.checking;
+      notifyListeners();
       await loadUserDataFromFirestore(user);
     } else {
       await clearUserData();
@@ -76,22 +99,25 @@ class UserProvider extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   Future<void> _updateBackgroundServiceConfig() async {
-     final prefs = await SharedPreferences.getInstance();
-     if (_firebaseUid.isNotEmpty) {
-       await prefs.setString('user_uid', _firebaseUid);
-       await prefs.setBool('callLogSharingEnabled', _callLogSharingEnabled);
-     } else {
-       await prefs.remove('user_uid');
-       await prefs.remove('callLogSharingEnabled');
-     }
+    final prefs = await SharedPreferences.getInstance();
+    if (_firebaseUid.isNotEmpty) {
+      await prefs.setString('user_uid', _firebaseUid);
+      await prefs.setBool('callLogSharingEnabled', _callLogSharingEnabled);
+    } else {
+      await prefs.remove('user_uid');
+      await prefs.remove('callLogSharingEnabled');
+    }
   }
 
   Future<void> loadUserDataFromFirestore(User fcmUser) async {
+    // Fast loading from cache
+    await loadProfileFromCache();
+
     try {
       DocumentSnapshot? doc = await _firestoreService.getUserData(fcmUser.uid);
-      
+
       if (doc.exists) {
         final data = doc.data() as Map<String, dynamic>;
         _userName = data['name'] ?? 'No Name';
@@ -106,7 +132,31 @@ class UserProvider extends ChangeNotifier {
         _status = data['status']; // Load status
         _partnerId = data['partner_uid'];
         _callLogSharingEnabled = data['callLogSharingEnabled'] ?? true;
-        
+
+        // Ultra-safe list parsing
+        _galleryImages = (data['gallery_images'] is List)
+            ? List<String>.from(data['gallery_images'].map((e) => e.toString()))
+            : [];
+
+        final friendsList = (data['friends'] is List)
+            ? List<String>.from(data['friends'].map((e) => e.toString()))
+            : <String>[];
+
+        final followingList = (data['following'] is List)
+            ? List<String>.from(data['following'].map((e) => e.toString()))
+            : <String>[];
+
+        final likedByList = (data['liked_by'] is List)
+            ? List<String>.from(data['liked_by'].map((e) => e.toString()))
+            : <String>[];
+
+        _friends = friendsList;
+        _following = followingList;
+        _likedBy = likedByList;
+        _friendsCount = friendsList.length;
+        _followingCount = followingList.length;
+        _likesCount = likedByList.length;
+        _isLikedByMe = likedByList.contains(fcmUser.uid);
         await _updateBackgroundServiceConfig();
 
         if (_partnerId != null) {
@@ -115,51 +165,60 @@ class UserProvider extends ChangeNotifier {
             final partnerData = partnerDoc.data() as Map<String, dynamic>;
             _partnerName = partnerData['name'] ?? 'Partner';
             _partnerProfileImageUrl = partnerData['profile_image_url'];
+            _partnerBannerImageUrl = partnerData['banner_image_url'];
+            _partnerStatus = partnerData['status'];
+            _partnerPremiumId = partnerData['premium_id'];
           }
         }
         _authStatus = AuthStatus.loggedIn;
+        await saveProfileToCache(); // Cache for fast load
         notifyListeners();
       } else {
-        await clearUserData();
-        _authStatus = AuthStatus.loggedOut;
-        notifyListeners();
+        // Document doesn't exist? Create a fallback document so they aren't locked out.
+        debugPrint('User document missing! Creating fallback...');
+        await _firestoreService.createUser(
+          uid: fcmUser.uid,
+          name: fcmUser.displayName ?? 'User',
+          email: fcmUser.email ?? '',
+          gender: 'Not specified',
+        );
+        // Try loading again
+        final newDoc = await _firestoreService.getUserData(fcmUser.uid);
+        if (newDoc.exists) {
+          final data = newDoc.data() as Map<String, dynamic>;
+          _userName = data['name'] ?? 'User';
+          _firebaseUid = fcmUser.uid;
+          _premiumId = data['premium_id'] ?? '';
+          _authStatus = AuthStatus.loggedIn;
+          notifyListeners();
+        } else {
+          await clearUserData();
+          _authStatus = AuthStatus.loggedOut;
+          notifyListeners();
+        }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Error loading user data: $e');
+      debugPrint('Stack trace: $stackTrace');
       await clearUserData();
       _authStatus = AuthStatus.loggedOut;
       notifyListeners();
+      throw Exception('Data Load Error: $e');
     }
-  }
-
-  Future<File?> _compressImage(File file) async {
-    try {
-      final tempDir = await getTemporaryDirectory();
-      final targetPath = '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.jpg';
-
-      final result = await FlutterImageCompress.compressAndGetFile(
-        file.absolute.path,
-        targetPath,
-        quality: 50,
-      );
-
-      if (result != null) {
-        final compressedFile = File(result.path);
-        return compressedFile;
-      }
-    } catch (e) {
-      debugPrint("Error compressing image: $e");
-    }
-    return null;
   }
 
   Future<void> uploadAndSaveProfilePhoto(File imageFile) async {
     if (_firebaseUid.isEmpty) return;
     try {
-      final compressedImage = await _compressImage(imageFile);
-      if (compressedImage == null) throw Exception("Image compression failed.");
-      final String? imageUrl = await _cloudinaryService.uploadProfilePhoto(compressedImage, _firebaseUid);
+      final String? imageUrl = await _cloudinaryService.uploadProfilePhoto(
+        imageFile,
+        _firebaseUid,
+      );
       if (imageUrl != null) {
-        await _firestoreService.updateUserProfilePhotoUrl(_firebaseUid, imageUrl);
+        await _firestoreService.updateUserProfilePhotoUrl(
+          _firebaseUid,
+          imageUrl,
+        );
         await _firestoreService.logPhotoUpdate(_firebaseUid, _userName);
         _profileImageUrl = imageUrl;
         _userImage = null;
@@ -175,11 +234,15 @@ class UserProvider extends ChangeNotifier {
   Future<void> uploadAndSaveBannerPhoto(File imageFile) async {
     if (_firebaseUid.isEmpty) return;
     try {
-      final compressedImage = await _compressImage(imageFile);
-      if (compressedImage == null) throw Exception("Image compression failed.");
-      final String? imageUrl = await _cloudinaryService.uploadBannerPhoto(compressedImage, _firebaseUid);
+      final String? imageUrl = await _cloudinaryService.uploadBannerPhoto(
+        imageFile,
+        _firebaseUid,
+      );
       if (imageUrl != null) {
-        await _firestoreService.updateUserBannerPhotoUrl(_firebaseUid, imageUrl);
+        await _firestoreService.updateUserBannerPhotoUrl(
+          _firebaseUid,
+          imageUrl,
+        );
         _bannerImageUrl = imageUrl;
         notifyListeners();
       } else {
@@ -188,6 +251,26 @@ class UserProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint("Error uploading and saving banner photo: $e");
       rethrow;
+    }
+  }
+
+  Future<void> uploadAndSaveGalleryPhoto(File imageFile) async {
+    if (_firebaseUid.isEmpty) return;
+    try {
+      final String? imageUrl = await _cloudinaryService.uploadGalleryPhoto(
+        imageFile,
+        _firebaseUid,
+      );
+      if (imageUrl != null) {
+        await _firestoreService.addUserGalleryPhotoUrl(_firebaseUid, imageUrl);
+        _galleryImages.add(imageUrl);
+        notifyListeners();
+      } else {
+        throw Exception("Cloudinary upload failed, URL is null.");
+      }
+    } catch (e) {
+      debugPrint("Error uploading gallery photo: $e");
+      throw Exception("Photo upload failed: ${e.toString()}");
     }
   }
 
@@ -204,19 +287,27 @@ class UserProvider extends ChangeNotifier {
   }
 
   Future<void> linkPartner(String partnerId) async {
-    if (_firebaseUid.isEmpty) throw Exception("Current user not authenticated.");
+    if (_firebaseUid.isEmpty) {
+      throw Exception("Current user not authenticated.");
+    }
     try {
-      await _firestoreService.linkPartners(currentUserId: _firebaseUid, partnerId: partnerId);
+      await _firestoreService.linkPartners(
+        currentUserId: _firebaseUid,
+        partnerId: partnerId,
+      );
       await loadUserDataFromFirestore(_auth.currentUser!);
     } catch (e) {
       throw Exception("Failed to link partner: ${e.toString()}");
     }
   }
-  
+
   Future<void> disconnectPartner() async {
     if (_partnerId == null || _firebaseUid.isEmpty) return;
     try {
-      await _firestoreService.disconnectPartner(currentUserId: _firebaseUid, partnerId: _partnerId!);
+      await _firestoreService.disconnectPartner(
+        currentUserId: _firebaseUid,
+        partnerId: _partnerId!,
+      );
       _partnerId = null;
       _partnerName = null;
       _partnerProfileImageUrl = null;
@@ -242,12 +333,13 @@ class UserProvider extends ChangeNotifier {
     _partnerName = null;
     _partnerProfileImageUrl = null;
     _callLogSharingEnabled = true;
-    
+    _galleryImages = [];
+
     await _updateBackgroundServiceConfig();
     _authStatus = AuthStatus.loggedOut;
     notifyListeners();
   }
-  
+
   Future<void> updateUserName(String newName) async {
     if (_firebaseUid.isEmpty || newName.trim().isEmpty) return;
     try {
@@ -295,7 +387,10 @@ class UserProvider extends ChangeNotifier {
   Future<void> updateUserSignature(String newSignature) async {
     if (_firebaseUid.isEmpty) return;
     try {
-      await _firestoreService.updateUserSignature(_firebaseUid, newSignature.trim());
+      await _firestoreService.updateUserSignature(
+        _firebaseUid,
+        newSignature.trim(),
+      );
       _signature = newSignature.trim();
       notifyListeners();
     } catch (e) {
@@ -325,6 +420,79 @@ class UserProvider extends ChangeNotifier {
     _callLogSharingEnabled = enabled;
     await _firestoreService.updateCallLogSharing(_firebaseUid, enabled);
     await _updateBackgroundServiceConfig();
+    notifyListeners();
+  }
+
+  Future<void> toggleLike() async {
+    if (_firebaseUid.isEmpty) return;
+    try {
+      final newLikeState = !_isLikedByMe;
+      await _firestoreService.toggleLike(
+        targetUid: _firebaseUid, // Because this is my profile
+        currentUid: _firebaseUid,
+        isLiked: newLikeState,
+      );
+      _isLikedByMe = newLikeState;
+      _likesCount += newLikeState ? 1 : -1;
+      notifyListeners();
+    } catch (e) {
+      throw Exception("Failed to toggle like.");
+    }
+  }
+
+  Future<void> saveProfileToCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_userName.isNotEmpty) prefs.setString('cache_userName', _userName);
+    if (_profileImageUrl != null) {
+      prefs.setString('cache_profileImageUrl', _profileImageUrl!);
+    }
+    if (_bannerImageUrl != null) {
+      prefs.setString('cache_bannerImageUrl', _bannerImageUrl!);
+    }
+    if (_status != null) prefs.setString('cache_status', _status!);
+
+    if (_partnerId != null) {
+      prefs.setString('cache_partnerId', _partnerId!);
+      if (_partnerName != null) {
+        prefs.setString('cache_partnerName', _partnerName!);
+      }
+      if (_partnerProfileImageUrl != null) {
+        prefs.setString(
+          'cache_partnerProfileImageUrl',
+          _partnerProfileImageUrl!,
+        );
+      }
+      if (_partnerBannerImageUrl != null) {
+        prefs.setString('cache_partnerBannerImageUrl', _partnerBannerImageUrl!);
+      }
+      if (_partnerStatus != null) {
+        prefs.setString('cache_partnerStatus', _partnerStatus!);
+      }
+      if (_partnerPremiumId != null) {
+        prefs.setString('cache_partnerPremiumId', _partnerPremiumId!);
+      }
+    } else {
+      prefs.remove('cache_partnerId');
+    }
+  }
+
+  Future<void> loadProfileFromCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    _userName = prefs.getString('cache_userName') ?? _userName;
+    _profileImageUrl =
+        prefs.getString('cache_profileImageUrl') ?? _profileImageUrl;
+    _bannerImageUrl =
+        prefs.getString('cache_bannerImageUrl') ?? _bannerImageUrl;
+    _status = prefs.getString('cache_status') ?? _status;
+
+    _partnerId = prefs.getString('cache_partnerId');
+    if (_partnerId != null) {
+      _partnerName = prefs.getString('cache_partnerName');
+      _partnerProfileImageUrl = prefs.getString('cache_partnerProfileImageUrl');
+      _partnerBannerImageUrl = prefs.getString('cache_partnerBannerImageUrl');
+      _partnerStatus = prefs.getString('cache_partnerStatus');
+      _partnerPremiumId = prefs.getString('cache_partnerPremiumId');
+    }
     notifyListeners();
   }
 }

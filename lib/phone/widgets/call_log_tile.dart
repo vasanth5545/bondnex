@@ -3,23 +3,33 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../../providers/call_log_provider.dart';
-import '../../providers/display_settings_provider.dart';
-import '../call_log_model.dart';
-import '../outgoing_call_screen.dart';
-import '../call_log_details_screen.dart';
-import '../contact_profile_screen.dart';
-import '../message_screen.dart';
+import '../../../providers/call_log_provider.dart';
+import '../../../providers/display_settings_provider.dart';
+import '../../../models/call_log_model.dart';
+import 'package:bondnex/phone/calls/outgoing_call_screen.dart';
+import 'package:bondnex/phone/screens/contact_profile_screen.dart';
+import 'package:bondnex/screens/communication/message_screen.dart';
 import 'package:flutter_contacts/flutter_contacts.dart' as fc;
 
 // MODIFIED: Intha function ippo ore oru color mattum tharum. Gradient illa.
 Color _getColorForContact(String name) {
   final List<MaterialColor> materialColors = [
-    Colors.red, Colors.pink, Colors.purple, Colors.deepPurple,
-    Colors.indigo, Colors.blue, Colors.lightBlue, Colors.cyan,
-    Colors.teal, Colors.green, Colors.lightGreen,
-    Colors.amber, Colors.orange, Colors.deepOrange, Colors.brown,
-    Colors.blueGrey
+    Colors.red,
+    Colors.pink,
+    Colors.purple,
+    Colors.deepPurple,
+    Colors.indigo,
+    Colors.blue,
+    Colors.lightBlue,
+    Colors.cyan,
+    Colors.teal,
+    Colors.green,
+    Colors.lightGreen,
+    Colors.amber,
+    Colors.orange,
+    Colors.deepOrange,
+    Colors.brown,
+    Colors.blueGrey,
   ];
   if (name.isEmpty) return Colors.grey;
   // Peroda hash code vechi, list-la irundhu oru color-ah select pannum.
@@ -48,7 +58,9 @@ class CallLogTile extends StatelessWidget {
 
   String _formatContactName(fc.Contact contact, NameSortOrder sortOrder) {
     if (contact.displayName.isEmpty) {
-      return contact.phones.isNotEmpty ? contact.phones.first.number : 'Unknown';
+      return contact.phones.isNotEmpty
+          ? contact.phones.first.number
+          : 'Unknown';
     }
     if (sortOrder == NameSortOrder.lastNameFirst) {
       return '${contact.name.last} ${contact.name.first}'.trim();
@@ -60,10 +72,8 @@ class CallLogTile extends StatelessWidget {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => OutgoingCallScreen(
-          contact: log.contact,
-          callType: 'SIM',
-        ),
+        builder: (context) =>
+            OutgoingCallScreen(contact: log.contact, callType: 'SIM'),
       ),
     );
   }
@@ -76,7 +86,10 @@ class CallLogTile extends StatelessWidget {
   }
 
   void _deleteLog(BuildContext context) {
-    final callLogProvider = Provider.of<CallLogProvider>(context, listen: false);
+    final callLogProvider = Provider.of<CallLogProvider>(
+      context,
+      listen: false,
+    );
     callLogProvider.deleteCallLog(log.id);
   }
 
@@ -102,11 +115,18 @@ class CallLogTile extends StatelessWidget {
             break;
         }
 
-        final titleText = _formatContactName(log.contact, displaySettings.sortOrder);
-        final subtitleText = log.contact.phones.isNotEmpty ? "+91 ${log.contact.phones.first.number}" : "No number";
+        final titleText = _formatContactName(
+          log.contact,
+          displaySettings.sortOrder,
+        );
+        final subtitleText = log.contact.phones.isNotEmpty
+            ? "+91 ${log.contact.phones.first.number}"
+            : "No number";
         // MODIFIED: Ippo inga ore oru color thaan varum.
         final avatarColor = _getColorForContact(titleText);
-        final avatarLetter = titleText.isNotEmpty ? titleText[0].toUpperCase() : '#';
+        final avatarLetter = titleText.isNotEmpty
+            ? titleText[0].toUpperCase()
+            : '#';
 
         final listTile = ListTile(
           leading: GestureDetector(
@@ -114,39 +134,80 @@ class CallLogTile extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ContactDetailsScreen(contact: log.contact),
+                  builder: (context) =>
+                      ContactDetailsScreen(contact: log.contact),
                 ),
               );
             },
             // MODIFIED: CircleAvatar ippo gradient illama, ore color-la irukkum.
             child: CircleAvatar(
               backgroundColor: avatarColor,
-              backgroundImage: log.contact.photo != null ? MemoryImage(log.contact.photo!) : null,
+              backgroundImage: log.contact.photo != null
+                  ? MemoryImage(log.contact.photo!)
+                  : null,
               child: (log.contact.photo == null)
-                  ? Text(avatarLetter, style: const TextStyle(color: Colors.white))
+                  ? Text(
+                      avatarLetter,
+                      style: const TextStyle(color: Colors.white),
+                    )
                   : null,
             ),
           ),
-          title: Text(
-            titleText,
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-            ),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  titleText,
+                  style: GoogleFonts.poppins(
+                    color: log.isDeleted ? Colors.grey : Colors.white,
+                    fontWeight: FontWeight.w500,
+                    decoration: log.isDeleted
+                        ? TextDecoration.lineThrough
+                        : null,
+                  ),
+                ),
+              ),
+              if (log.isDeleted)
+                Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'Deleted',
+                    style: TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
           ),
           subtitle: Text(
             subtitleText,
-            style: GoogleFonts.poppins(color: Colors.grey[400]),
+            style: GoogleFonts.poppins(
+              color: Colors.grey[400],
+              decoration: log.isDeleted ? TextDecoration.lineThrough : null,
+            ),
           ),
           trailing: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Icon(icon, color: color, size: 18),
+              Icon(icon, color: log.isDeleted ? Colors.grey : color, size: 18),
               const SizedBox(height: 4),
               Text(
                 _formatTimestamp(log.timestamp),
-                style: GoogleFonts.poppins(color: Colors.grey[500], fontSize: 12),
+                style: GoogleFonts.poppins(
+                  color: Colors.grey[500],
+                  fontSize: 12,
+                ),
               ),
             ],
           ),
@@ -156,15 +217,23 @@ class CallLogTile extends StatelessWidget {
               context: context,
               builder: (context) => AlertDialog(
                 title: const Text('Delete Log'),
-                content: const Text('Are you sure you want to delete this call log? This action will be visible to your partner.'),
+                content: const Text(
+                  'Are you sure you want to delete this call log? This action will be visible to your partner.',
+                ),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
                   TextButton(
                     onPressed: () {
                       _deleteLog(context);
                       Navigator.pop(context);
                     },
-                    child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                    child: const Text(
+                      'Delete',
+                      style: TextStyle(color: Colors.red),
+                    ),
                   ),
                 ],
               ),
@@ -174,8 +243,16 @@ class CallLogTile extends StatelessWidget {
 
         return Dismissible(
           key: ValueKey(log.id),
-          background: _buildSwipeAction(Alignment.centerLeft, Colors.green, Icons.call),
-          secondaryBackground: _buildSwipeAction(Alignment.centerRight, Colors.blue, Icons.message),
+          background: _buildSwipeAction(
+            Alignment.centerLeft,
+            Colors.green,
+            Icons.call,
+          ),
+          secondaryBackground: _buildSwipeAction(
+            Alignment.centerRight,
+            Colors.blue,
+            Icons.message,
+          ),
           confirmDismiss: (direction) async {
             if (direction == DismissDirection.startToEnd) {
               _makeCall(context);
@@ -190,7 +267,11 @@ class CallLogTile extends StatelessWidget {
     );
   }
 
-  Widget _buildSwipeAction(AlignmentGeometry alignment, Color color, IconData icon) {
+  Widget _buildSwipeAction(
+    AlignmentGeometry alignment,
+    Color color,
+    IconData icon,
+  ) {
     return Container(
       decoration: BoxDecoration(
         color: color,

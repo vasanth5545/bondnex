@@ -9,10 +9,10 @@ import 'firebase_options.dart';
 import 'package:device_preview/device_preview.dart';
 
 // Colors
-import 'providers/app_colors.dart';
+import 'theme/app_colors.dart';
 
 // Providers
-import 'providers/theme_provider.dart'; 
+import 'providers/theme_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/app_lock_provider.dart';
 import 'providers/contacts_provider.dart';
@@ -20,53 +20,50 @@ import 'providers/call_log_provider.dart';
 import 'providers/display_settings_provider.dart';
 
 // Services
-import 'services/auth_service.dart';
-import 'services/database_helper.dart';
+import 'package:bondnex/services/auth/auth_service.dart';
+import 'package:bondnex/services/database/database_helper.dart';
 
 // Screens
-import 'auth_wrapper.dart';
-import 'splash_screen.dart';
-import 'permissions_screen.dart';
-import 'home_page.dart';
-import 'app_lock_screen.dart';
-import 'settings_screen.dart';
-import 'intro_dashboard.dart';
-import 'settings/account_settings_screen.dart';
-import 'settings/change_name_screen.dart';
-import 'settings/profile_photo_screen.dart';
-import 'settings/password.dart';
-import 'settings/usage_access_screen.dart';
-import 'settings/panic_button_settings_screen.dart';
-import 'settings/uninstall_confirm_screen.dart';
-import 'settings/merge_contacts_screen.dart';
-import 'partner_call_history_screen.dart';
-import 'phone/call_log_details_screen.dart';
-import 'phone/display_options_screen.dart';
-import 'edit_profile_screen.dart';
-import 'update_status_screen.dart'; // Puthu screen ah import pannunga
+import 'screens/auth/auth_wrapper.dart';
+import 'screens/auth/splash_screen.dart';
+import 'package:bondnex/settings/permissions/permissions_screen.dart';
+import 'screens/dashboard/home_page.dart';
+import 'package:bondnex/settings/general/settings_screen.dart';
+import 'screens/dashboard/intro_dashboard.dart';
+import 'package:bondnex/settings/profile/change_name_screen.dart';
+import 'package:bondnex/settings/profile/profile_photo_screen.dart';
+import 'package:bondnex/settings/security/password.dart';
+import 'package:bondnex/settings/permissions/usage_access_screen.dart';
+import 'package:bondnex/settings/security/uninstall_confirm_screen.dart';
+import 'package:bondnex/settings/general/merge_contacts_screen.dart';
+import 'package:bondnex/phone/partner/partner_call_history_screen.dart';
+import 'package:bondnex/phone/screens/call_log_details_screen.dart';
+import 'package:bondnex/phone/screens/display_options_screen.dart';
+import 'package:bondnex/screens/profile/edit_profile_screen.dart';
+import 'package:bondnex/screens/profile/update_status_screen.dart'; // Puthu screen ah import pannunga
+import 'package:bondnex/settings/profile/account_settings_screen.dart';
+import 'package:bondnex/settings/security/panic_button_settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  print("💥 BondNex app starting...");
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await DatabaseHelper().initDatabase();
-  
-  
+
   runApp(
     DevicePreview(
       enabled: false,
       builder: (context) => MultiProvider(
         providers: [
           Provider<AuthService>(create: (_) => AuthService()),
-          ChangeNotifierProvider(create: (_) => ThemeProvider()), 
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
           ChangeNotifierProvider(create: (_) => UserProvider()),
           ChangeNotifierProvider(create: (_) => AppLockProvider()),
           ChangeNotifierProvider(create: (_) => ContactsProvider()),
           ChangeNotifierProvider(create: (_) => DisplaySettingsProvider()),
           ChangeNotifierProxyProvider<UserProvider, CallLogProvider>(
-            create: (context) => CallLogProvider(Provider.of<UserProvider>(context, listen: false)),
+            create: (context) => CallLogProvider(
+              Provider.of<UserProvider>(context, listen: false),
+            ),
             update: (context, userProvider, previousCallLogProvider) {
               previousCallLogProvider?.updateUserProvider(userProvider);
               return previousCallLogProvider ?? CallLogProvider(userProvider);
@@ -87,7 +84,6 @@ class BondNexApp extends StatelessWidget {
     final themeProvider = Provider.of<ThemeProvider>(context);
 
     return MaterialApp(
-      useInheritedMediaQuery: true,
       locale: DevicePreview.locale(context),
       builder: DevicePreview.appBuilder,
       title: 'BondNex',
@@ -132,22 +128,31 @@ class BondNexApp extends StatelessWidget {
           hintStyle: GoogleFonts.poppins(color: AppColors.textTertiary),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppColors.textTertiary.withOpacity(0.3)),
+            borderSide: BorderSide(
+              color: AppColors.textTertiary.withValues(alpha: 0.3),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppColors.textTertiary.withOpacity(0.3)),
+            borderSide: BorderSide(
+              color: AppColors.textTertiary.withValues(alpha: 0.3),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.primaryGreen, width: 2),
+            borderSide: const BorderSide(
+              color: AppColors.primaryGreen,
+              width: 2,
+            ),
           ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryGreen,
             foregroundColor: AppColors.pureWhite,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             textStyle: GoogleFonts.poppins(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -161,7 +166,7 @@ class BondNexApp extends StatelessWidget {
           type: BottomNavigationBarType.fixed,
         ),
       ),
-      
+
       // Dark Theme
       darkTheme: ThemeData(
         brightness: Brightness.dark,
@@ -200,22 +205,31 @@ class BondNexApp extends StatelessWidget {
           hintStyle: GoogleFonts.poppins(color: AppColors.textOnDarkSecondary),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppColors.darkGrey.withOpacity(0.5)),
+            borderSide: BorderSide(
+              color: AppColors.darkGrey.withValues(alpha: 0.5),
+            ),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppColors.darkGrey.withOpacity(0.5)),
+            borderSide: BorderSide(
+              color: AppColors.darkGrey.withValues(alpha: 0.5),
+            ),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: AppColors.primaryGreen, width: 2),
+            borderSide: const BorderSide(
+              color: AppColors.primaryGreen,
+              width: 2,
+            ),
           ),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.primaryGreen,
             foregroundColor: AppColors.primaryBlack,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             textStyle: GoogleFonts.poppins(
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -229,9 +243,9 @@ class BondNexApp extends StatelessWidget {
           type: BottomNavigationBarType.fixed,
         ),
       ),
-      
+
       home: const SplashScreen(),
-      
+
       routes: {
         '/login': (context) => const AuthWrapper(),
         '/home': (context) => const HomePage(),
@@ -242,15 +256,17 @@ class BondNexApp extends StatelessWidget {
         '/profile_photo': (context) => const ProfilePhotoScreen(),
         '/password': (context) => const PasswordPage(),
         '/usage_access': (context) => const UsageAccessScreen(),
-        '/panic_button_settings': (context) => const PanicButtonSettingsScreen(),
+        '/panic_button_settings': (context) =>
+            const PanicButtonSettingsScreen(),
         '/uninstall_lock': (context) => const UninstallConfirmScreen(),
         '/merge_contacts': (context) => const MergeContactsScreen(),
         '/partner_call_history': (context) => const PartnerCallHistoryScreen(),
-        '/call_details':(context) => const CallLogDetailsScreen(),
+        '/call_details': (context) => const CallLogDetailsScreen(),
         '/display_options': (context) => const DisplayOptionsScreen(),
         '/intro_dashboard': (context) => const IntroDashboardScreen(),
         '/edit_profile': (context) => const EditProfileScreen(),
-        '/update_status': (context) => const UpdateStatusScreen(), // Intha line ah add pannunga
+        '/update_status': (context) =>
+            const UpdateStatusScreen(), // Intha line ah add pannunga
       },
     );
   }

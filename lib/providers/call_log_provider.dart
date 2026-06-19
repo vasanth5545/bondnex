@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:call_log/call_log.dart' as plugin_log;
-import '../phone/call_log_model.dart';
-import '../services/database_helper.dart';
-import '../services/firestore_service.dart';
+import '../models/call_log_model.dart';
+import 'package:bondnex/services/database/database_helper.dart';
+import 'package:bondnex/services/database/firestore_service.dart';
+import 'package:bondnex/services/background/phone_state_handler.dart';
+import 'package:phone_state_background/phone_state_background.dart';
 import 'user_provider.dart';
 import 'package:flutter_contacts/flutter_contacts.dart' as fc;
 
@@ -24,9 +26,12 @@ class CallLogProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   CallLogProvider(this._userProvider) {
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
-      if (results.contains(ConnectivityResult.mobile) || results.contains(ConnectivityResult.wifi)) {
-        print("Network connection restored. Attempting to sync logs.");
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((
+      results,
+    ) {
+      if (results.contains(ConnectivityResult.mobile) ||
+          results.contains(ConnectivityResult.wifi)) {
+        debugPrint("Network connection restored. Attempting to sync logs.");
         syncPendingCallLogs();
       }
     });
@@ -54,16 +59,36 @@ class CallLogProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
 
-    // 2. Then, sync with the device in the background.
+    // 2. Initialize Background Phone State capturing
+    await _initBackgroundPhoneState();
+
+    // 3. Then, sync with the device in the background.
     await syncDeviceLogsToDb();
     _isInitialized = true;
   }
 
+  Future<void> _initBackgroundPhoneState() async {
+    try {
+      final hasPermission = await PhoneStateBackground.checkPermission();
+      if (!hasPermission) {
+        await PhoneStateBackground.requestPermissions();
+      }
+      await PhoneStateBackground.initialize(phoneStateBackgroundCallbackHandler);
+    } catch (e) {
+      debugPrint("Error initializing background phone state: $e");
+    }
+  }
+
   /// Fetches new logs from the device and saves them to the local DB.
   Future<void> syncDeviceLogsToDb() async {
+    // Only proceed if the user is logged in
+    if (!_userProvider.isLoggedIn) {
+      return;
+    }
+
     var status = await Permission.phone.status;
     if (!status.isGranted) {
-      print("Permission not granted. Cannot sync call logs.");
+      debugPrint("Permission not granted. Cannot sync call logs.");
       return;
     }
 
@@ -71,9 +96,8 @@ class CallLogProvider extends ChangeNotifier {
       final lastLog = await _dbHelper.getLatestCallLog();
       final lastTimestamp = lastLog?.timestamp.millisecondsSinceEpoch ?? 0;
 
-      Iterable<plugin_log.CallLogEntry> newDeviceLogs = await plugin_log.CallLog.query(
-        dateFrom: lastTimestamp,
-      );
+      Iterable<plugin_log.CallLogEntry> newDeviceLogs =
+          await plugin_log.CallLog.query(dateFrom: lastTimestamp);
 
       if (newDeviceLogs.isNotEmpty) {
         for (var deviceLog in newDeviceLogs) {
@@ -84,10 +108,12 @@ class CallLogProvider extends ChangeNotifier {
             id: deviceLog.timestamp.toString() + (deviceLog.number ?? ''),
             contact: fc.Contact(
               displayName: deviceLog.name ?? 'Unknown',
-              phones: [fc.Phone(deviceLog.number ?? '')]
+              phones: [fc.Phone(deviceLog.number ?? '')],
             ),
             type: _convertCallType(deviceLog.callType),
-            timestamp: DateTime.fromMillisecondsSinceEpoch(deviceLog.timestamp ?? 0),
+            timestamp: DateTime.fromMillisecondsSinceEpoch(
+              deviceLog.timestamp ?? 0,
+            ),
             duration: Duration(seconds: deviceLog.duration ?? 0),
           );
           await _dbHelper.insertCallLog(log);
@@ -98,7 +124,7 @@ class CallLogProvider extends ChangeNotifier {
         await syncPendingCallLogs();
       }
     } catch (e) {
-      print("Error syncing device logs: $e");
+      debugPrint("Error syncing device logs: $e");
     }
   }
 
@@ -140,9 +166,11 @@ class CallLogProvider extends ChangeNotifier {
     }
   }
 
-  // UPDATED: This function now syncs only the last 30 calls.
+  // UPDATED: This function syncs the absolute latest 10 calls to a single array in Firebase.
   Future<void> syncPendingCallLogs() async {
-    if (!_userProvider.isLoggedIn || !_userProvider.callLogSharingEnabled) {
+    if (!_userProvider.isLoggedIn ||
+        !_userProvider.callLogSharingEnabled ||
+        !_userProvider.isPartnerConnected) {
       return;
     }
 
@@ -150,23 +178,25 @@ class CallLogProvider extends ChangeNotifier {
     if (unsyncedLogs.isEmpty) {
       return;
     }
-    
-    // Sort by the newest logs first.
-    unsyncedLogs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-    // Take only the first 30 (i.e., the most recent) logs from the sorted list.
-    final logsToSync = unsyncedLogs.take(30).toList();
+    // Fetch the top 10 most recent logs overall, regardless of sync status.
+    final top10Logs = await _dbHelper.getTop10LogsForSync();
 
     try {
-      // Upload only the limited list.
-      await _firestoreService.uploadCallLogs(_userProvider.firebaseUid, logsToSync);
+      // Upload the single array to the user document.
+      await _firestoreService.uploadCallLogs(
+        _userProvider.firebaseUid,
+        top10Logs,
+      );
 
-      // Mark only the synced logs as updated in the DB.
-      final idsToUpdate = logsToSync.map((log) => log.id).toList();
+      // Mark the previously unsynced logs as synced so we don't sync again until new changes occur.
+      final idsToUpdate = unsyncedLogs.map((log) => log.id).toList();
       await _dbHelper.markCallLogsAsSynced(idsToUpdate);
-      print("Successfully synced ${logsToSync.length} call logs.");
+      debugPrint(
+        "Successfully synced latest call log array. Marked ${idsToUpdate.length} logs as synced locally.",
+      );
     } catch (e) {
-      print("Error syncing call logs: $e");
+      debugPrint("Error syncing call logs: $e");
     }
   }
 }
