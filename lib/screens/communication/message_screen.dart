@@ -8,6 +8,7 @@ import '../../providers/user_provider.dart';
 import 'package:bondnex/services/database/firestore_service.dart';
 import 'package:bondnex/services/database/database_helper.dart';
 import 'package:bondnex/services/core/shared_prefs_service.dart';
+import 'package:bondnex/services/encryption/aes_encryption_service.dart';
 import '../profile/public_profile_screen.dart';
 
 class MessageScreen extends StatefulWidget {
@@ -31,15 +32,19 @@ class _MessageScreenState extends State<MessageScreen> {
 
   // Local caching state
   StreamSubscription<QuerySnapshot>? _messageSubscription;
+  StreamSubscription<DocumentSnapshot>? _typingSubscription;
   List<Map<String, dynamic>> _messages = [];
   bool _isLoadingMessages = true;
   String? _currentPartnerId;
+  bool _partnerIsTyping = false;
+  Timer? _typingTimer;
 
   @override
   void initState() {
     super.initState();
     _loadLocalSearchHistory();
     _messageFocusNode.addListener(_onFocusChange);
+    _messageController.addListener(_onTypingChanged);
   }
 
   void _onFocusChange() {
@@ -51,9 +56,41 @@ class _MessageScreenState extends State<MessageScreen> {
     _messageFocusNode.removeListener(_onFocusChange);
     _messageFocusNode.dispose();
     _searchController.dispose();
+    _messageController.removeListener(_onTypingChanged);
     _messageController.dispose();
     _messageSubscription?.cancel();
+    _typingSubscription?.cancel();
+    _typingTimer?.cancel();
+    // Clear typing status on leaving the screen
+    _setTypingStatus(false);
     super.dispose();
+  }
+
+  /// Debounced typing indicator
+  void _onTypingChanged() {
+    final text = _messageController.text;
+    if (text.isNotEmpty) {
+      _setTypingStatus(true);
+      _typingTimer?.cancel();
+      _typingTimer = Timer(const Duration(seconds: 2), () {
+        _setTypingStatus(false);
+      });
+    } else {
+      _typingTimer?.cancel();
+      _setTypingStatus(false);
+    }
+  }
+
+  void _setTypingStatus(bool isTyping) {
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    if (!userProvider.isPartnerConnected || userProvider.partnerId == null) {
+      return;
+    }
+    _firestoreService.setTypingStatus(
+      userProvider.firebaseUid,
+      userProvider.partnerId!,
+      isTyping,
+    );
   }
 
   @override
@@ -64,12 +101,15 @@ class _MessageScreenState extends State<MessageScreen> {
       if (_currentPartnerId != userProvider.partnerId) {
         _currentPartnerId = userProvider.partnerId;
         _initMessages(userProvider.firebaseUid, userProvider.partnerId!);
+        _initTypingListener(userProvider.firebaseUid, userProvider.partnerId!);
       }
     } else {
       if (_messageSubscription != null) {
         _messageSubscription?.cancel();
         _messageSubscription = null;
       }
+      _typingSubscription?.cancel();
+      _typingSubscription = null;
       _currentPartnerId = null;
       if (_messages.isNotEmpty) {
         setState(() {
@@ -77,6 +117,22 @@ class _MessageScreenState extends State<MessageScreen> {
         });
       }
     }
+  }
+
+  void _initTypingListener(String currentUid, String partnerUid) {
+    _typingSubscription?.cancel();
+    _typingSubscription = _firestoreService
+        .getChatMetaStream(currentUid, partnerUid)
+        .listen((snapshot) {
+          if (!mounted) return;
+          final data = snapshot.data() as Map<String, dynamic>?;
+          final isPartnerTyping = data?['typing_$partnerUid'] as bool? ?? false;
+          if (_partnerIsTyping != isPartnerTyping) {
+            setState(() {
+              _partnerIsTyping = isPartnerTyping;
+            });
+          }
+        });
   }
 
   void _initMessages(String currentUid, String partnerUid) async {
@@ -103,16 +159,32 @@ class _MessageScreenState extends State<MessageScreen> {
         .getMessagesStream(currentUid, partnerUid, lastTimestamp: lastTimestamp)
         .listen((snapshot) async {
           if (snapshot.docs.isNotEmpty) {
+            final aesService = AesEncryptionService();
             List<Map<String, dynamic>> newMessages = [];
+            
             for (var doc in snapshot.docs) {
               final data = doc.data() as Map<String, dynamic>;
               final timestamp = data['timestamp'] as Timestamp?;
+              
+              String decryptedText = '[Decryption Error]';
+              try {
+                if (data.containsKey('encryptedPayload')) {
+                   // If sender is us, we still decrypt using partnerUid because partnerUid is the other party
+                   decryptedText = await aesService.decrypt(data['encryptedPayload'], partnerUid);
+                } else if (data.containsKey('text')) {
+                   // Fallback for unencrypted legacy messages
+                   decryptedText = data['text'];
+                }
+              } catch (e) {
+                debugPrint('Error decrypting message: $e');
+              }
+
               final msgData = {
                 'id': doc.id,
                 'chatId': chatId,
                 'senderId': data['senderId'],
                 'receiverId': data['receiverId'],
-                'text': data['text'],
+                'text': decryptedText,
                 'timestamp':
                     timestamp?.millisecondsSinceEpoch ??
                     DateTime.now().millisecondsSinceEpoch,
@@ -220,6 +292,9 @@ class _MessageScreenState extends State<MessageScreen> {
     }
 
     _messageController.clear();
+    // Stop typing indicator immediately on send
+    _typingTimer?.cancel();
+    _setTypingStatus(false);
 
     final chatId = await _firestoreService.getChatId(
       userProvider.firebaseUid,
@@ -244,29 +319,21 @@ class _MessageScreenState extends State<MessageScreen> {
     });
 
     try {
-      final realId = await _firestoreService.sendMessage(
+      await _firestoreService.sendMessage(
         userProvider.firebaseUid,
         userProvider.partnerId!,
         text,
+        timestamp,
       );
 
-      // Update local db
-      final dbHelper = DatabaseHelper();
-      await dbHelper.insertMessage({
-        'id': realId,
-        'chatId': chatId,
-        'senderId': userProvider.firebaseUid,
-        'receiverId': userProvider.partnerId!,
-        'text': text,
-        'timestamp': timestamp,
-        'isRead': 0,
-      });
-
-      // Reload to ensure consistency (and remove temp)
-      final updatedMessages = await dbHelper.getMessagesForChat(chatId);
+      // We do not need to update SQLite manually because the Stream listener
+      // will instantly receive the local write from Firestore and insert it.
+      // But we should remove the temp message from the UI once the stream takes over.
+      // Alternatively, just keeping it here doesn't hurt since the stream will add the real one
+      // and we just remove the temp one.
       if (mounted) {
         setState(() {
-          _messages = updatedMessages.toList();
+          _messages.removeWhere((m) => m['id'] == tempId);
         });
       }
     } catch (e) {
@@ -310,7 +377,7 @@ class _MessageScreenState extends State<MessageScreen> {
       title: Row(
         children: [
           CircleAvatar(
-            radius: 16, // Slightly smaller in AppBar
+            radius: 18,
             backgroundColor: Colors.grey[900],
             backgroundImage:
                 userProvider.partnerProfileImageUrl != null &&
@@ -320,17 +387,37 @@ class _MessageScreenState extends State<MessageScreen> {
             child:
                 userProvider.partnerProfileImageUrl == null ||
                     userProvider.partnerProfileImageUrl!.isEmpty
-                ? const Icon(Icons.favorite, color: Colors.pinkAccent, size: 18)
+                ? const Icon(Icons.favorite, color: Colors.pinkAccent, size: 20)
                 : null,
           ),
-          const SizedBox(width: 10),
-          Text(
-            userProvider.partnerName ?? 'Partner',
-            style: GoogleFonts.poppins(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                userProvider.partnerName ?? 'Partner',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  const Icon(Icons.lock, color: Colors.greenAccent, size: 10),
+                  const SizedBox(width: 4),
+                  Text(
+                    'End-to-End Encrypted',
+                    style: GoogleFonts.poppins(
+                      color: Colors.greenAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),
@@ -343,6 +430,26 @@ class _MessageScreenState extends State<MessageScreen> {
           },
         ),
       ],
+      bottom: _partnerIsTyping
+          ? PreferredSize(
+              preferredSize: const Size.fromHeight(20),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 16, bottom: 4),
+                child: Row(
+                  children: [
+                    Text(
+                      'typing...',
+                      style: GoogleFonts.poppins(
+                        color: Colors.pinkAccent,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : null,
     );
   }
 

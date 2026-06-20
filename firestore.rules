@@ -2,11 +2,89 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // Allow logged-in users to read and write to all collections
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    
+    // Helper functions
+    function hasValidAppCheck() {
+      return request.appCheck != null && request.appCheck.token != null;
     }
     
+    function isAuthenticated() {
+      return request.auth != null && hasValidAppCheck();
+    }
+    
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    // A helper to check if the user is part of a combined chatId (e.g. "uid1_uid2")
+    function isParticipant(chatId) {
+      return isAuthenticated() && chatId.matches('.*' + request.auth.uid + '.*');
+    }
+
+    // 1. Users Collection
+    match /users/{userId} {
+      // Anyone authenticated can read a user profile (needed for checking partner's public key)
+      allow read: if isAuthenticated();
+      // Only the user can write to their own profile
+      allow write: if isOwner(userId);
+    }
+
+    // 2. Love Requests (Partner Requests)
+    // Managed primarily by Cloud Functions, but clients need read access to see incoming/outgoing requests
+    match /love_requests/{requestId} {
+      // User can read if their UID is part of the requestId
+      allow read: if isParticipant(requestId);
+      // No client-side write access, all writes must go through Cloud Functions
+      allow write: if false; 
+    }
+
+    // 3. Chats (E2EE Messages)
+    match /chats/{chatId} {
+      allow read: if isParticipant(chatId);
+      allow write: if isParticipant(chatId);
+      
+      match /messages/{messageId} {
+        allow read: if isParticipant(chatId);
+        // Prevent spoofing: only the sender can write their own messages
+        allow create, update: if isParticipant(chatId) && request.resource.data.senderId == request.auth.uid;
+        allow delete: if isParticipant(chatId) && resource.data.senderId == request.auth.uid;
+      }
+    }
+
+    // 4. Call Logs (E2EE Call History)
+    match /call_logs/{chatId} {
+      allow read: if isParticipant(chatId);
+      allow write: if isParticipant(chatId);
+
+      match /history/{logId} {
+        allow read: if isParticipant(chatId);
+        // Prevent forging: logId must be the current user's UID
+        allow write: if isParticipant(chatId) && logId == request.auth.uid;
+      }
+    }
+    // 5. Enterprise Security & Monetization
+    // Clients can read their own premium and ad statuses. Cloud Functions handle all writes.
+    match /users/{userId}/premium_status/{document=**} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+    match /users/{userId}/ad_unlocks/{document=**} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // Zero Trust backend collections. Clients have NO direct access.
+    // They must use Cloud Functions (e.g. checkAppStatus, createRazorpayOrder, reportSecurityThreat)
+    // Monetization configuration must be readable by the client
+    match /app_config/{document=**} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+    match /subscriptions/{document=**} {
+      allow read, write: if false;
+    }
+    match /security_alerts/{document=**} {
+      allow read, write: if false;
+    }
   }
 }

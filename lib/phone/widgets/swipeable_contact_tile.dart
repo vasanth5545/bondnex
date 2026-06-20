@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_contacts/flutter_contacts.dart' as fc;
+import 'package:url_launcher/url_launcher.dart';
 import '../../../providers/display_settings_provider.dart';
-import 'package:bondnex/phone/calls/outgoing_call_screen.dart';
 import 'package:bondnex/phone/screens/contact_profile_screen.dart';
 import 'package:bondnex/screens/communication/message_screen.dart';
 
@@ -93,15 +93,7 @@ class _SwipeableContactTileState extends State<SwipeableContactTile> {
           },
           confirmDismiss: (direction) async {
             if (direction == DismissDirection.startToEnd) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => OutgoingCallScreen(
-                    contact: widget.contact,
-                    callType: 'SIM',
-                  ),
-                ),
-              );
+              _makeRealCall(context, widget.contact);
             } else if (direction == DismissDirection.endToStart) {
               Navigator.push(
                 context,
@@ -172,15 +164,7 @@ class _SwipeableContactTileState extends State<SwipeableContactTile> {
                   ),
                 ),
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => OutgoingCallScreen(
-                        contact: widget.contact,
-                        callType: 'SIM',
-                      ),
-                    ),
-                  );
+                  _makeRealCall(context, widget.contact);
                 },
               ),
             ),
@@ -204,5 +188,22 @@ class _SwipeableContactTileState extends State<SwipeableContactTile> {
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Icon(icon, color: Colors.white, size: 28),
     );
+  }
+
+  /// Launch the system dialer for a real phone call
+  void _makeRealCall(BuildContext context, fc.Contact contact) async {
+    final phoneNumber = contact.phones.isNotEmpty
+        ? contact.phones.first.number
+        : '';
+    if (phoneNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number available')),
+      );
+      return;
+    }
+    final Uri telUri = Uri(scheme: 'tel', path: phoneNumber);
+    if (await canLaunchUrl(telUri)) {
+      await launchUrl(telUri);
+    }
   }
 }

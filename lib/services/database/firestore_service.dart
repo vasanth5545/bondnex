@@ -2,13 +2,20 @@
 // UPDATED: Custom Document IDs with [UserName]_[PremiumUID] format.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:math';
 import 'dart:convert';
 import '../../models/call_log_model.dart';
-import '../security/encryption_service.dart';
+
+import '../encryption/aes_encryption_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  // Cache doc IDs to avoid repeated Firestore queries
+  static final Map<String, String> _docIdCache = {};
 
   String _generatePremiumId() {
     final random = Random();
@@ -33,6 +40,11 @@ class FirestoreService {
 
   // --- Utility to Get User Document ID by Auth UID ---
   Future<String> _getUserDocId(String uid) async {
+    // Check cache first
+    if (_docIdCache.containsKey(uid)) {
+      return _docIdCache[uid]!;
+    }
+
     final querySnapshot = await _db
         .collection('users')
         .where('uid', isEqualTo: uid)
@@ -40,10 +52,26 @@ class FirestoreService {
         .get();
 
     if (querySnapshot.docs.isNotEmpty) {
-      return querySnapshot.docs.first.id;
+      final docId = querySnapshot.docs.first.id;
+      _docIdCache[uid] = docId; // Cache the result
+      return docId;
     }
-    // Fallback for older users or if document isn't found with the query.
+
+    // Fallback: check if a document with the UID as the ID itself exists
+    final directDoc = await _db.collection('users').doc(uid).get();
+    if (directDoc.exists) {
+      _docIdCache[uid] = uid;
+      return uid;
+    }
+
+    // Last resort fallback — log a warning
+    debugPrint('WARNING: Could not find Firestore doc for uid: $uid. Using raw uid as fallback.');
     return uid;
+  }
+
+  /// Clear cached doc IDs (call on logout)
+  static void clearDocIdCache() {
+    _docIdCache.clear();
   }
 
   // --- User Management ---
@@ -81,6 +109,30 @@ class FirestoreService {
   Future<DocumentSnapshot> getUserData(String userId) async {
     final docId = await _getUserDocId(userId);
     return _db.collection('users').doc(docId).get();
+  }
+
+  Future<void> deleteUserAccount(String uid) async {
+    final functions = FirebaseFunctions.instance;
+    await functions.httpsCallable('deleteaccount').call();
+    
+    // Clear cache
+    clearDocIdCache();
+  }
+
+  // Update FCM Token
+  Future<void> updateFCMToken(String token) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    
+    final docId = await _getUserDocId(uid);
+    try {
+      await _db.collection('users').doc(docId).set({
+        'fcmToken': token,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint("Error updating FCM token: $e");
+    }
   }
 
   Future<String?> getUidByPremiumId(String premiumId) async {
@@ -172,20 +224,9 @@ class FirestoreService {
     required String currentUserId,
     required String partnerId,
   }) async {
-    final currentUserDocId = await _getUserDocId(currentUserId);
-    final partnerDocId = await _getUserDocId(partnerId);
-
-    final currentUserRef = _db.collection('users').doc(currentUserDocId);
-    final partnerRef = _db.collection('users').doc(partnerDocId);
-
-    await _db.runTransaction((transaction) async {
-      DocumentSnapshot partnerDoc = await transaction.get(partnerRef);
-      if (!partnerDoc.exists) {
-        throw Exception("Partner with this ID does not exist.");
-      }
-
-      transaction.update(currentUserRef, {'partner_uid': partnerId});
-      transaction.update(partnerRef, {'partner_uid': currentUserId});
+    final functions = FirebaseFunctions.instance;
+    await functions.httpsCallable('acceptpartnerrequest').call({
+      'senderUid': partnerId,
     });
   }
 
@@ -193,16 +234,8 @@ class FirestoreService {
     required String currentUserId,
     required String partnerId,
   }) async {
-    final currentUserDocId = await _getUserDocId(currentUserId);
-    final partnerDocId = await _getUserDocId(partnerId);
-
-    final currentUserRef = _db.collection('users').doc(currentUserDocId);
-    final partnerRef = _db.collection('users').doc(partnerDocId);
-
-    await _db.runTransaction((transaction) async {
-      transaction.update(currentUserRef, {'partner_uid': null});
-      transaction.update(partnerRef, {'partner_uid': null});
-    });
+    final functions = FirebaseFunctions.instance;
+    await functions.httpsCallable('unlinkpartner').call();
   }
 
   // --- Love Request Management ---
@@ -212,18 +245,12 @@ class FirestoreService {
     required String senderName,
     required String senderProfileImageUrl,
   }) async {
-    final senderDocId = await _getUserDocId(senderUid);
-    final receiverDocId = await _getUserDocId(receiverUid);
-    final docId = '${senderDocId}_$receiverDocId';
-    await _db.collection('love_requests').doc(docId).set({
-      'sender_uid': senderUid,
-      'receiver_uid': receiverUid,
-      'sender_name': senderName,
-      'sender_profile_image_url': senderProfileImageUrl,
-      'status': 'pending',
-      'timestamp': FieldValue.serverTimestamp(),
-      'request_count': FieldValue.increment(1),
-    }, SetOptions(merge: true));
+    final functions = FirebaseFunctions.instance;
+    await functions.httpsCallable('sendpartnerrequest').call({
+      'partnerUid': receiverUid,
+      'senderName': senderName,
+      'senderProfileImageUrl': senderProfileImageUrl,
+    });
   }
 
   Stream<QuerySnapshot> getLoveRequests(String userId) {
@@ -243,49 +270,39 @@ class FirestoreService {
   }
 
   Future<void> cancelLoveRequest(String requestId) async {
-    await _db.collection('love_requests').doc(requestId).delete();
+    final parts = requestId.split('_');
+    if (parts.length == 2) {
+      final functions = FirebaseFunctions.instance;
+      await functions.httpsCallable('cancelpartnerrequest').call({
+        'receiverUid': parts[1],
+      });
+    }
   }
 
   Future<void> updateLoveRequestStatus({
     required String requestId,
     required String status,
   }) async {
-    await _db.collection('love_requests').doc(requestId).update({
-      'status': status,
-    });
+    if (status == 'declined' || status == 'rejected') {
+      final parts = requestId.split('_');
+      if (parts.length == 2) {
+        final functions = FirebaseFunctions.instance;
+        await functions.httpsCallable('rejectpartnerrequest').call({
+          'senderUid': parts[0],
+        });
+      }
+    }
   }
 
   Future<void> deleteAllOtherPendingRequests(
     String receiverUid,
     String acceptedRequestId,
   ) async {
-    final querySnapshot = await _db
-        .collection('love_requests')
-        .where('receiver_uid', isEqualTo: receiverUid)
-        .where('status', isEqualTo: 'pending')
-        .get();
-
-    final WriteBatch batch = _db.batch();
-    for (var doc in querySnapshot.docs) {
-      if (doc.id != acceptedRequestId) {
-        batch.delete(doc.reference);
-      }
-    }
-    await batch.commit();
+    // Handled securely by Cloud Functions now.
   }
 
   Future<void> deleteAllSentPendingRequests(String senderUid) async {
-    final querySnapshot = await _db
-        .collection('love_requests')
-        .where('sender_uid', isEqualTo: senderUid)
-        .where('status', isEqualTo: 'pending')
-        .get();
-
-    final WriteBatch batch = _db.batch();
-    for (var doc in querySnapshot.docs) {
-      batch.delete(doc.reference);
-    }
-    await batch.commit();
+    // Handled securely by Cloud Functions now.
   }
 
   // --- Call Log Management ---
@@ -294,59 +311,40 @@ class FirestoreService {
     final userDoc = await _db.collection('users').doc(docId).get();
     if (!userDoc.exists) return;
 
-    final partnerUid = userDoc.data()?['partner_uid'] as String?;
+    final partnerUid = userDoc.data()?['linkedPartnerUid'] as String?;
     if (partnerUid == null || partnerUid.isEmpty) {
-      // If no partner, clean up logs and don't upload
-      await _db.collection('users').doc(docId).update({
-        'encrypted_call_logs': FieldValue.delete(),
-        'latest_call_logs': FieldValue.delete(),
-      });
-      await _db
-          .collection('users')
-          .doc(docId)
-          .collection('call_logs')
-          .doc('history')
-          .delete();
       return;
     }
 
+    final chatId = await getChatId(userId, partnerUid);
+
     final serializedLogs = logs.map((log) => log.toFirestore()).toList();
     final jsonString = jsonEncode(serializedLogs);
-    final encryptedString = EncryptionService.encryptData(
-      jsonString,
-      userId,
-      partnerUid,
-    );
+    
+    // Encrypt the entire JSON string
+    final aesService = AesEncryptionService();
+    final encryptedString = await aesService.encrypt(jsonString, partnerUid);
 
-    // Save in the call_logs subcollection instead of the main user document
+    // Save in the shared call_logs subcollection using userId as document
     await _db
-        .collection('users')
-        .doc(docId)
         .collection('call_logs')
-        .doc('history')
+        .doc(chatId)
+        .collection('history')
+        .doc(userId)
         .set({
-          'encrypted_call_logs': encryptedString,
+          'encryptedPayload': encryptedString,
           'timestamp': FieldValue.serverTimestamp(),
         });
-
-    // Cleanup the old fields from the main document to avoid clutter
-    try {
-      await _db.collection('users').doc(docId).update({
-        'encrypted_call_logs': FieldValue.delete(),
-        'latest_call_logs': FieldValue.delete(),
-      });
-    } catch (e) {
-      // Fields might already be deleted, ignore
-    }
   }
 
-  Stream<DocumentSnapshot> getPartnerCallLogs(String partnerId) async* {
-    final docId = await _getUserDocId(partnerId);
+  Stream<DocumentSnapshot> getPartnerCallLogs(String currentUid, String partnerId) async* {
+    final chatId = await getChatId(currentUid, partnerId);
+    debugPrint('Fetching partner call logs from: call_logs/$chatId/history/$partnerId');
     yield* _db
-        .collection('users')
-        .doc(docId)
         .collection('call_logs')
-        .doc('history')
+        .doc(chatId)
+        .collection('history')
+        .doc(partnerId)
         .snapshots();
   }
 
@@ -419,16 +417,22 @@ class FirestoreService {
         : '${docId2}_$docId1';
   }
 
-  // --- Chat Messaging ---
   Future<String> sendMessage(
     String senderUid,
     String receiverUid,
     String text,
+    int timestampMs,
   ) async {
     final senderDocId = await _getUserDocId(senderUid);
     final receiverDocId = await _getUserDocId(receiverUid);
     // Use user document IDs to build the chat ID
     final chatId = await getChatId(senderUid, receiverUid);
+
+    final explicitTimestamp = Timestamp.fromMillisecondsSinceEpoch(timestampMs);
+    
+    // Encrypt the message text
+    final aesService = AesEncryptionService();
+    final encryptedText = await aesService.encrypt(text, receiverUid);
 
     final docRef = await _db
         .collection('chats')
@@ -437,14 +441,14 @@ class FirestoreService {
         .add({
           'senderId': senderUid,
           'receiverId': receiverUid,
-          'text': text,
-          'timestamp': FieldValue.serverTimestamp(),
+          'encryptedPayload': encryptedText,
+          'timestamp': explicitTimestamp,
           'status': 'sent',
         });
 
     await _db.collection('chats').doc(chatId).set({
-      'lastMessage': text,
-      'lastTimestamp': FieldValue.serverTimestamp(),
+      'lastMessageEncrypted': encryptedText,
+      'lastTimestamp': explicitTimestamp,
       'participants': [senderUid, receiverUid], // Auth UIDs for query
       'participantDocIds': [senderDocId, receiverDocId], // Extra metadata
     }, SetOptions(merge: true));
@@ -473,6 +477,26 @@ class FirestoreService {
     }
 
     yield* query.snapshots();
+  }
+
+  // --- Typing Indicator ---
+  Future<void> setTypingStatus(
+    String currentUid,
+    String partnerUid,
+    bool isTyping,
+  ) async {
+    final chatId = await getChatId(currentUid, partnerUid);
+    await _db.collection('chats').doc(chatId).set({
+      'typing_$currentUid': isTyping,
+    }, SetOptions(merge: true));
+  }
+
+  Stream<DocumentSnapshot> getChatMetaStream(
+    String currentUid,
+    String partnerUid,
+  ) async* {
+    final chatId = await getChatId(currentUid, partnerUid);
+    yield* _db.collection('chats').doc(chatId).snapshots();
   }
 
   Future<void> markMessagesAsRead(String currentUid, String partnerUid) async {

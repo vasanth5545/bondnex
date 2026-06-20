@@ -18,7 +18,7 @@ class CallLogProvider extends ChangeNotifier {
   List<CallLogEntry> _callLogs = [];
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   bool _isLoading = false;
-  bool _isInitialized = false;
+  bool _isSyncing = false; // Prevents concurrent syncs, but allows re-sync
 
   UserProvider _userProvider;
 
@@ -50,7 +50,6 @@ class CallLogProvider extends ChangeNotifier {
 
   /// Loads logs from DB first for speed, then syncs device logs in the background.
   Future<void> initializeCallLogs() async {
-    if (_isInitialized) return;
     _isLoading = true;
     notifyListeners();
 
@@ -64,7 +63,6 @@ class CallLogProvider extends ChangeNotifier {
 
     // 3. Then, sync with the device in the background.
     await syncDeviceLogsToDb();
-    _isInitialized = true;
   }
 
   Future<void> _initBackgroundPhoneState() async {
@@ -86,45 +84,71 @@ class CallLogProvider extends ChangeNotifier {
       return;
     }
 
-    var status = await Permission.phone.status;
-    if (!status.isGranted) {
-      debugPrint("Permission not granted. Cannot sync call logs.");
-      return;
-    }
+    // Prevent concurrent syncs
+    if (_isSyncing) return;
+    _isSyncing = true;
 
     try {
+      // Check both phone and contacts permissions
+      var phoneStatus = await Permission.phone.status;
+      if (!phoneStatus.isGranted) {
+        phoneStatus = await Permission.phone.request();
+      }
+      if (!phoneStatus.isGranted) {
+        debugPrint("Phone permission not granted. Cannot sync call logs.");
+        return;
+      }
+
+      // Some Android devices require contacts permission for call log name resolution
+      var contactsStatus = await Permission.contacts.status;
+      if (!contactsStatus.isGranted) {
+        await Permission.contacts.request();
+      }
+
       final lastLog = await _dbHelper.getLatestCallLog();
       final lastTimestamp = lastLog?.timestamp.millisecondsSinceEpoch ?? 0;
+
+      debugPrint("Syncing device logs from timestamp: $lastTimestamp");
 
       Iterable<plugin_log.CallLogEntry> newDeviceLogs =
           await plugin_log.CallLog.query(dateFrom: lastTimestamp);
 
+      debugPrint("Found ${newDeviceLogs.length} device logs to process");
+
+      int insertedCount = 0;
       if (newDeviceLogs.isNotEmpty) {
         for (var deviceLog in newDeviceLogs) {
+          final deviceTs = deviceLog.timestamp ?? 0;
           // Avoid re-inserting the very last log we already have
-          if (deviceLog.timestamp == lastTimestamp) continue;
+          if (deviceTs == lastTimestamp && deviceTs != 0) continue;
+          if (deviceTs == 0) continue; // Skip invalid entries
 
           final log = CallLogEntry(
-            id: deviceLog.timestamp.toString() + (deviceLog.number ?? ''),
+            id: deviceTs.toString() + (deviceLog.number ?? ''),
             contact: fc.Contact(
               displayName: deviceLog.name ?? 'Unknown',
               phones: [fc.Phone(deviceLog.number ?? '')],
             ),
             type: _convertCallType(deviceLog.callType),
-            timestamp: DateTime.fromMillisecondsSinceEpoch(
-              deviceLog.timestamp ?? 0,
-            ),
+            timestamp: DateTime.fromMillisecondsSinceEpoch(deviceTs),
             duration: Duration(seconds: deviceLog.duration ?? 0),
           );
           await _dbHelper.insertCallLog(log);
+          insertedCount++;
         }
 
-        // Refresh UI from DB and sync to Firestore
-        await loadCallLogsFromDb();
-        await syncPendingCallLogs();
+        if (insertedCount > 0) {
+          debugPrint("Inserted $insertedCount new call logs into local DB");
+          // Refresh UI from DB and sync to Firestore
+          await loadCallLogsFromDb();
+          await syncPendingCallLogs();
+        }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint("Error syncing device logs: $e");
+      debugPrint("Stack trace: $stackTrace");
+    } finally {
+      _isSyncing = false;
     }
   }
 

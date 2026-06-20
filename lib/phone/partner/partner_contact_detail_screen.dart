@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:bondnex/services/database/firestore_service.dart';
 import 'package:provider/provider.dart';
 import '../../providers/user_provider.dart';
-import 'package:bondnex/services/security/encryption_service.dart';
+import 'package:bondnex/services/encryption/aes_encryption_service.dart';
 import 'dart:convert';
 import '../../models/call_log_model.dart';
 import '../../phone/widgets/call_log_tile.dart';
@@ -80,7 +80,7 @@ class PartnerContactDetailScreen extends StatelessWidget {
           ),
           Expanded(
             child: StreamBuilder<DocumentSnapshot>(
-              stream: firestoreService.getPartnerCallLogs(partnerId),
+              stream: firestoreService.getPartnerCallLogs(userProvider.firebaseUid, partnerId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
@@ -97,64 +97,74 @@ class PartnerContactDetailScreen extends StatelessWidget {
                 }
 
                 final data = snapshot.data!.data() as Map<String, dynamic>?;
-                final encryptedString = data?['encrypted_call_logs'] as String?;
+                final encryptedString = data?['encryptedPayload'] as String?;
                 List<dynamic> rawLogs = [];
 
                 if (encryptedString != null &&
                     encryptedString.isNotEmpty &&
                     userProvider.firebaseUid.isNotEmpty &&
                     userProvider.partnerId != null) {
-                  final decryptedString = EncryptionService.decryptData(
-                    encryptedString,
-                    userProvider.firebaseUid,
-                    userProvider.partnerId!,
-                  );
-                  if (decryptedString.isNotEmpty) {
-                    try {
-                      rawLogs = jsonDecode(decryptedString) as List<dynamic>;
-                    } catch (e) {
-                      debugPrint('Error decoding logs: \$e');
+                  return FutureBuilder<String>(
+                    future: AesEncryptionService().decrypt(encryptedString, userProvider.partnerId!),
+                    builder: (context, decryptSnapshot) {
+                      if (decryptSnapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (decryptSnapshot.hasError || !decryptSnapshot.hasData || decryptSnapshot.data!.isEmpty) {
+                        return const Center(child: Text('Decryption error or empty data.'));
+                      }
+                      
+                      try {
+                        rawLogs = jsonDecode(decryptSnapshot.data!) as List<dynamic>;
+                      } catch (e) {
+                        debugPrint('Error decoding logs: \$e');
+                      }
+                      
+                      return _buildLogsList(rawLogs);
                     }
-                  }
+                  );
                 } else {
                   rawLogs = data?['latest_call_logs'] as List<dynamic>? ?? [];
+                  return _buildLogsList(rawLogs);
                 }
-
-                if (rawLogs.isEmpty) {
-                  return const Center(
-                    child: Text('No call history with this contact.'),
-                  );
-                }
-
-                final callLogs = rawLogs
-                    .map(
-                      (map) =>
-                          CallLogEntry.fromMap(map as Map<String, dynamic>),
-                    )
-                    .where(
-                      (log) =>
-                          log.contact.phones.isNotEmpty &&
-                          log.contact.phones.first.number == contactNumber,
-                    )
-                    .toList();
-
-                if (callLogs.isEmpty) {
-                  return const Center(
-                    child: Text('No call history with this contact.'),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: callLogs.length,
-                  itemBuilder: (context, index) {
-                    return CallLogTile(log: callLogs[index]);
-                  },
-                );
               },
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildLogsList(List<dynamic> rawLogs) {
+    if (rawLogs.isEmpty) {
+      return const Center(
+        child: Text('No call history with this contact.'),
+      );
+    }
+
+    final callLogs = rawLogs
+        .map(
+          (map) =>
+              CallLogEntry.fromMap(map as Map<String, dynamic>),
+        )
+        .where(
+          (log) =>
+              log.contact.phones.isNotEmpty &&
+              log.contact.phones.first.number == contactNumber,
+        )
+        .toList();
+
+    if (callLogs.isEmpty) {
+      return const Center(
+        child: Text('No call history with this contact.'),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: callLogs.length,
+      itemBuilder: (context, index) {
+        return CallLogTile(log: callLogs[index]);
+      },
     );
   }
 }

@@ -1,0 +1,33 @@
+package com.bondnex.couple
+
+import android.telecom.Call
+import android.telecom.InCallService
+
+class BondNexInCallService : InCallService() {
+
+    companion object {
+        var instance: BondNexInCallService? = null
+    }
+
+    override fun onCallAdded(call: Call) {
+        super.onCallAdded(call)
+        CallManager.setCall(call)
+        instance = this
+    }
+
+    override fun onCallRemoved(call: Call) {
+        super.onCallRemoved(call)
+        CallManager.setCall(null)
+        if (CallManager.currentCall == null) {
+            instance = null
+        }
+    }
+
+    fun setMute(muted: Boolean) {
+        setMuted(muted)
+    }
+
+    fun setAudio(route: Int) {
+        setAudioRoute(route)
+    }
+}

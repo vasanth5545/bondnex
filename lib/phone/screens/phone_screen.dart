@@ -3,17 +3,18 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:material_design_icons_flutter/material_design_icons_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../providers/contacts_provider.dart';
 import '../../providers/call_log_provider.dart';
-import 'package:bondnex/phone/calls/outgoing_call_screen.dart';
-import 'package:bondnex/phone/calls/incoming_call_screen.dart';
 import 'package:bondnex/phone/screens/save_contact_screen.dart';
 
 import 'package:flutter_contacts/flutter_contacts.dart' as fc;
 import 'package:bondnex/phone/widgets/call_log_tile.dart';
 import 'package:bondnex/phone/widgets/swipeable_contact_tile.dart';
 import '../../models/call_log_model.dart';
+import 'package:bondnex/services/telephony/call_manager_service.dart';
 import 'package:bondnex/phone/screens/phone_settings_screen.dart';
+import 'package:bondnex/services/telephony/sim_service.dart';
 
 class PhoneScreen extends StatefulWidget {
   const PhoneScreen({super.key});
@@ -25,6 +26,25 @@ class PhoneScreen extends StatefulWidget {
 class _PhoneScreenState extends State<PhoneScreen> {
   final PageController _pageController = PageController();
   int _currentPageIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAndRequestDefaultDialer();
+  }
+
+  Future<void> _checkAndRequestDefaultDialer() async {
+    final callManager = CallManagerService();
+    bool isDefault = await callManager.isDefaultDialer();
+    if (!isDefault) {
+      bool result = await callManager.requestDefaultDialer();
+      if (result && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('BondNex is now the default dialer.')),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -131,9 +151,6 @@ class _RecentCallsScreenState extends State<RecentCallsScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<CallLogProvider>(context, listen: false).initializeCallLogs();
-    });
   }
 
   @override
@@ -201,25 +218,6 @@ class _RecentCallsScreenState extends State<RecentCallsScreen>
                     child: Column(
                       children: [
                         _buildSearchBar(context),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const IncomingCallScreen(
-                                  callerName: 'Olivia Bennett',
-                                  callerNumber: '+1 (555) 987-6543',
-                                ),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Simulate Incoming Call'),
-                        ),
                         const SizedBox(height: 24),
                         _buildSectionHeader('Recent', context),
                         if (uniqueLogs.isEmpty)
@@ -505,6 +503,22 @@ class DialpadSheet extends StatefulWidget {
 
 class _DialpadSheetState extends State<DialpadSheet> {
   final TextEditingController _controller = TextEditingController();
+  List<Map<String, dynamic>> _simCards = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSimCards();
+  }
+
+  Future<void> _loadSimCards() async {
+    final sims = await SimService.getSimCards();
+    if (mounted) {
+      setState(() {
+        _simCards = sims;
+      });
+    }
+  }
 
   void _onButtonPressed(String value) {
     setState(() {
@@ -552,106 +566,121 @@ class _DialpadSheetState extends State<DialpadSheet> {
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const SizedBox(height: 12),
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[700],
-                        borderRadius: BorderRadius.circular(2),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 12),
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[700],
+                          borderRadius: BorderRadius.circular(2),
+                        ),
                       ),
                     ),
-                  ),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    height: hasText ? 70 : 0,
-                    child: hasText
-                        ? Row(
-                            children: [
-                              Expanded(
-                                child: SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  reverse: true,
-                                  child: Text(
-                                    _controller.text,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 40,
-                                      fontWeight: FontWeight.w400,
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      height: hasText ? 70 : 0,
+                      child: hasText
+                          ? Row(
+                              children: [
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    reverse: true,
+                                    child: Text(
+                                      _controller.text,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 40,
+                                        fontWeight: FontWeight.w400,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              IconButton(
-                                icon: Icon(
-                                  Icons.backspace_outlined,
-                                  color: Colors.grey[400],
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.backspace_outlined,
+                                    color: Colors.grey[400],
+                                  ),
+                                  onPressed: _onBackspacePressed,
+                                  onLongPress: () {
+                                    setState(() {
+                                      _controller.clear();
+                                    });
+                                  },
                                 ),
-                                onPressed: _onBackspacePressed,
-                                onLongPress: () {
-                                  setState(() {
-                                    _controller.clear();
-                                  });
-                                },
-                              ),
-                            ],
-                          )
-                        : null,
-                  ),
-                  GridView.count(
-                    crossAxisCount: 3,
-                    shrinkWrap: true,
-                    mainAxisSpacing: 4,
-                    crossAxisSpacing: 4,
-                    childAspectRatio: 1.7,
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: [..._getDialButtons()],
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _buildCallButton(
-                            'sim',
-                            Colors.green,
-                            Icons.phone,
-                          ),
-                        ),
-                        const SizedBox(width: 20),
-                        Expanded(
-                          child: _buildCallButton(
-                            'VOIP',
-                            Colors.purple,
-                            Icons.wifi_calling,
-                          ),
-                        ),
-                      ],
+                              ],
+                            )
+                          : null,
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            Icons.phone,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                          onPressed: () {},
-                        ),
-                        IconButton(
-                          icon: Icon(Icons.contacts, color: Colors.grey),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ],
+                    GridView.count(
+                      crossAxisCount: 3,
+                      shrinkWrap: true,
+                      mainAxisSpacing: 4,
+                      crossAxisSpacing: 4,
+                      childAspectRatio: 1.7,
+                      physics: const NeverScrollableScrollPhysics(),
+                      children: [..._getDialButtons()],
                     ),
-                  ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Row(
+                        children: _simCards.isEmpty || _simCards.length == 1
+                            ? [
+                                Expanded(
+                                  child: _buildCallButton(
+                                    _simCards.isNotEmpty ? _simCards.first['carrierName']?.toString() ?? 'Call' : 'Call',
+                                    Colors.green,
+                                    Icons.phone,
+                                    simSlotIndex: _simCards.isNotEmpty ? _simCards.first['slotIndex'] as int? : null,
+                                  ),
+                                ),
+                              ]
+                            : [
+                                Expanded(
+                                  child: _buildCallButton(
+                                    _simCards[0]['carrierName']?.toString() ?? 'SIM 1',
+                                    Colors.green,
+                                    Icons.phone_android,
+                                    simSlotIndex: _simCards[0]['slotIndex'] as int?,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildCallButton(
+                                    _simCards[1]['carrierName']?.toString() ?? 'SIM 2',
+                                    Colors.green,
+                                    Icons.phone_android,
+                                    simSlotIndex: _simCards[1]['slotIndex'] as int?,
+                                  ),
+                                ),
+                              ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          IconButton(
+                            icon: Icon(
+                              Icons.phone,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            onPressed: () {},
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.contacts, color: Colors.grey),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -707,22 +736,9 @@ class _DialpadSheetState extends State<DialpadSheet> {
     );
   }
 
-  Widget _buildCallButton(String label, Color color, IconData icon) {
+  Widget _buildCallButton(String label, Color color, IconData icon, {int? simSlotIndex}) {
     return ElevatedButton.icon(
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OutgoingCallScreen(
-              contact: fc.Contact(
-                displayName: 'Unknown',
-                phones: [fc.Phone(_controller.text)],
-              ),
-              callType: label,
-            ),
-          ),
-        );
-      },
+      onPressed: () => _makeRealCall(_controller.text, simSlotIndex: simSlotIndex),
       icon: Icon(icon, color: Colors.white),
       label: Text(label.toUpperCase()),
       style: ElevatedButton.styleFrom(
@@ -732,5 +748,43 @@ class _DialpadSheetState extends State<DialpadSheet> {
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       ),
     );
+  }
+
+  /// Launches the system dialer or makes a native call
+  Future<void> _makeRealCall(String phoneNumber, {int? simSlotIndex}) async {
+    if (phoneNumber.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a phone number')),
+      );
+      return;
+    }
+
+    bool isDefault = await CallManagerService().isDefaultDialer();
+    if (isDefault) {
+      // If we are default dialer, use CallManagerService to initiate call natively
+      await CallManagerService().makeCall(phoneNumber, simSlotIndex: simSlotIndex);
+      if (mounted) {
+        Navigator.of(context).pop(); // Close dialpad
+      }
+      return;
+    }
+
+    if (simSlotIndex != null) {
+      // Try to call directly with the selected SIM
+      final success = await SimService.placeCallWithSim(phoneNumber, simSlotIndex);
+      if (success) return; // If successful, Native side handled it
+    }
+
+    // Fallback: Launch default dialer via URL
+    final Uri telUri = Uri(scheme: 'tel', path: phoneNumber);
+    if (await canLaunchUrl(telUri)) {
+      await launchUrl(telUri);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch dialer')),
+        );
+      }
+    }
   }
 }

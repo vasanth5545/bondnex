@@ -10,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:bondnex/services/database/firestore_service.dart';
 import 'package:bondnex/services/storage/cloudinary_service.dart';
+import 'package:bondnex/services/database/database_helper.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum AuthStatus { checking, loggedIn, loggedOut }
 
@@ -338,6 +340,41 @@ class UserProvider extends ChangeNotifier {
     await _updateBackgroundServiceConfig();
     _authStatus = AuthStatus.loggedOut;
     notifyListeners();
+  }
+
+  Future<void> deleteAccount() async {
+    if (_firebaseUid.isEmpty) return;
+    try {
+      // 1. Delete Firestore Data & Unlink Partner
+      await _firestoreService.deleteUserAccount(_firebaseUid);
+      
+      // 2. Delete Local Database
+      try {
+        final dbHelper = DatabaseHelper();
+        await dbHelper.deleteEntireDatabase();
+      } catch (e) {
+        debugPrint('Error deleting local DB: $e');
+      }
+
+      // 3. Delete Secure Storage
+      try {
+        const secureStorage = FlutterSecureStorage();
+        await secureStorage.deleteAll();
+      } catch (e) {
+        debugPrint('Error deleting secure storage: $e');
+      }
+
+      // 4. Delete Firebase Auth User
+      final user = _auth.currentUser;
+      if (user != null) {
+        await user.delete();
+      }
+
+      // 5. Clear Local State
+      await clearUserData();
+    } catch (e) {
+      throw Exception("Failed to delete account: ${e.toString()}");
+    }
   }
 
   Future<void> updateUserName(String newName) async {

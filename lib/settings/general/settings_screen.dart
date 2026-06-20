@@ -110,6 +110,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'Contact Support',
                 onTap: () {},
               ),
+              const Divider(indent: 24, endIndent: 24),
+
+              _buildSectionHeader('Legal', theme),
+              _buildSettingsTile(
+                context: context,
+                icon: Icons.privacy_tip_outlined,
+                title: 'Privacy Policy',
+                onTap: () => Navigator.pushNamed(context, '/privacy_policy'),
+              ),
+              _buildSettingsTile(
+                context: context,
+                icon: Icons.description_outlined,
+                title: 'Terms & Conditions',
+                onTap: () => Navigator.pushNamed(context, '/terms_conditions'),
+              ),
+
+              const SizedBox(height: 20),
 
               // Conditional UI for Logout button vs Loading Indicator
               if (_isLoggingOut)

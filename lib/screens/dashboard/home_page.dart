@@ -14,6 +14,7 @@ import 'dashboard_screen.dart';
 import 'package:bondnex/phone/screens/phone_screen.dart';
 import 'package:bondnex/screens/communication/message_screen.dart';
 import 'package:bondnex/services/database/firestore_service.dart';
+import 'package:bondnex/providers/call_log_provider.dart';
 import 'intro_dashboard.dart';
 
 class HomePage extends StatefulWidget {
@@ -24,8 +25,16 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int _selectedIndex = 0;
+  int _selectedIndex = -1;
   DateTime? _lastBackPress;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<CallLogProvider>(context, listen: false).initializeCallLogs();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +79,11 @@ class _HomePageState extends State<HomePage> {
           ];
         }
 
+        // Initialize default tab (PhoneScreen)
+        if (_selectedIndex == -1) {
+          _selectedIndex = isLoggedIn ? 1 : 0;
+        }
+
         // Prevents range error when logging out
         if (_selectedIndex >= pages.length) {
           _selectedIndex = 0;
@@ -80,10 +94,11 @@ class _HomePageState extends State<HomePage> {
           onPopInvokedWithResult: (didPop, result) {
             if (didPop) return;
 
-            // If not on first tab, go back to first tab
-            if (_selectedIndex != 0) {
+            // If not on Phone tab (index 1 if logged in, index 0 if logged out)
+            final phoneTabIndex = isLoggedIn ? 1 : 0;
+            if (_selectedIndex != phoneTabIndex) {
               setState(() {
-                _selectedIndex = 0;
+                _selectedIndex = phoneTabIndex;
               });
               return;
             }

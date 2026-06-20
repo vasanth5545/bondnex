@@ -8,7 +8,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart'; // Permission package
 import '../../providers/user_provider.dart';
+import '../../providers/call_log_provider.dart';
 import 'auth_wrapper.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -24,16 +28,52 @@ class _SplashScreenState extends State<SplashScreen> {
     _initializeAndNavigate();
   }
 
-  // *** THE FIX IS HERE ***
-  // Indha puthu function, modhalla permission kettutu, aprom auth status ku wait pannum
+  bool _hasError = false;
+  String _errorMessage = "";
+  bool _canUpdate = false;
+
   Future<void> _initializeAndNavigate() async {
-    // Step 1: App open aagum bodhe phone and contacts permission ah kekkurom
-    // Indha pazhaya code ah thirumba serthirukkom
+    try {
+      final PackageInfo packageInfo = await PackageInfo.fromPlatform();
+      final currentVersion = int.tryParse(packageInfo.buildNumber) ?? 1;
+
+      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('checkAppStatus');
+      final result = await callable.call();
+      final data = result.data;
+
+      if (data['maintenanceMode'] == true) {
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+            _errorMessage = "App is currently under maintenance. Please try again later.";
+          });
+        }
+        return;
+      }
+
+      final minVersion = data['minVersion'] ?? 1;
+      final List<dynamic> blockedVersions = data['blockedVersions'] ?? [];
+
+      if (currentVersion < minVersion || blockedVersions.contains(currentVersion)) {
+        if (mounted) {
+          setState(() {
+            _hasError = true;
+            _canUpdate = true;
+            _errorMessage = "A critical update is required. Please update the app to continue.";
+          });
+        }
+        return;
+      }
+    } catch (e) {
+      debugPrint("App Config check failed, proceeding anyway: $e");
+    }
+
     await Permission.phone.request();
     await Permission.contacts.request();
 
-    // Step 2: Auth status ku wait panradhu (idhu Consumer la nadakkum)
-    // Adhunaala inga vera edhum seiya theva illa.
+    if (mounted) {
+      Provider.of<CallLogProvider>(context, listen: false).initializeCallLogs();
+    }
   }
 
   void _navigateToNextScreen(BuildContext context) {
@@ -51,10 +91,40 @@ class _SplashScreenState extends State<SplashScreen> {
     debugPrint("👀 Splash Screen loaded");
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E1A),
-      body: Consumer<UserProvider>(
+      body: _hasError ? Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 64),
+              const SizedBox(height: 16),
+              Text(
+                "App Notice",
+                style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70, fontSize: 16),
+              ),
+              const SizedBox(height: 32),
+              if (_canUpdate)
+                ElevatedButton(
+                  onPressed: () {
+                    // Replace with actual Play Store link
+                    launchUrl(Uri.parse("market://details?id=com.bondnex.couple"));
+                  },
+                  child: const Text("Update App"),
+                ),
+            ],
+          ),
+        )
+      ) : Consumer<UserProvider>(
         builder: (context, userProvider, child) {
           // Auth status 'checking' la irundhu maaruna odane, adutha screen ku pogum
-          if (userProvider.authStatus != AuthStatus.checking) {
+          if (userProvider.authStatus != AuthStatus.checking && !_hasError) {
             _navigateToNextScreen(context);
           }
 

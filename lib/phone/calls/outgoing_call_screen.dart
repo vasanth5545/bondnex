@@ -1,12 +1,7 @@
-// File: lib/phone/outgoing_call_screen.dart
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
-import '../../providers/call_log_provider.dart';
-import '../../providers/display_settings_provider.dart';
-import '../../models/call_log_model.dart';
 import 'package:flutter_contacts/flutter_contacts.dart' as fc;
+import 'package:bondnex/services/telephony/call_manager_service.dart';
 
 class OutgoingCallScreen extends StatefulWidget {
   final fc.Contact contact;
@@ -23,145 +18,92 @@ class OutgoingCallScreen extends StatefulWidget {
 }
 
 class _OutgoingCallScreenState extends State<OutgoingCallScreen> {
-  late Stopwatch _stopwatch;
+  bool _callLaunched = false;
 
   @override
   void initState() {
     super.initState();
-    _stopwatch = Stopwatch()..start();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _launchCall());
   }
 
-  @override
-  void dispose() {
-    _stopwatch.stop();
-    super.dispose();
-  }
+  Future<void> _launchCall() async {
+    final phoneNumber = widget.contact.phones.isNotEmpty
+        ? widget.contact.phones.first.number
+        : '';
 
-  void _endCall() {
-    final callLogProvider = Provider.of<CallLogProvider>(
-      context,
-      listen: false,
-    );
-
-    // This logic correctly creates a log entry. The provider handles the rest.
-    final log = CallLogEntry(
-      id:
-          DateTime.now().millisecondsSinceEpoch.toString() +
-          (widget.contact.phones.isNotEmpty
-              ? widget.contact.phones.first.number
-              : ''),
-      contact: widget.contact,
-      type: CallType.outgoing,
-      timestamp: DateTime.now(),
-      duration: _stopwatch.elapsed,
-      isSynced: false,
-    );
-
-    callLogProvider.addCallLog(log);
-
-    Navigator.pop(context);
-  }
-
-  String _formatContactName(fc.Contact contact, NameSortOrder sortOrder) {
-    if (contact.displayName.isEmpty) {
-      return contact.phones.isNotEmpty
-          ? contact.phones.first.number
-          : 'Unknown';
+    if (phoneNumber.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No phone number available')),
+        );
+        Navigator.of(context).pop();
+      }
+      return;
     }
-    if (sortOrder == NameSortOrder.lastNameFirst) {
-      return '${contact.name.last} ${contact.name.first}'.trim();
-    }
-    return contact.displayName;
+
+    setState(() => _callLaunched = true);
+    await CallManagerService().makeCall(phoneNumber);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<DisplaySettingsProvider>(
-      builder: (context, displaySettings, child) {
-        final contactName = _formatContactName(
-          widget.contact,
-          displaySettings.sortOrder,
-        );
+    final contactName = widget.contact.displayName.isNotEmpty
+        ? widget.contact.displayName
+        : 'Unknown';
+    final phoneNumber = widget.contact.phones.isNotEmpty
+        ? widget.contact.phones.first.number
+        : '';
 
-        return Scaffold(
-          backgroundColor: Colors.black,
-          body: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    children: [
-                      const SizedBox(height: 60),
-                      CircleAvatar(
-                        radius: 60,
-                        child: const Icon(Icons.person, size: 60),
-                      ),
-                      const SizedBox(height: 24),
-                      Text(
-                        contactName,
-                        style: GoogleFonts.poppins(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        widget.contact.phones.isNotEmpty
-                            ? widget.contact.phones.first.number
-                            : 'N/A',
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          color: Colors.grey,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Calling via ${widget.callType}...',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _buildCallControlButton(Icons.mic_off, 'Mute'),
-                          _buildCallControlButton(Icons.volume_up, 'Speaker'),
-                          _buildCallControlButton(Icons.dialpad, 'Keypad'),
-                          _buildCallControlButton(Icons.pause, 'Hold'),
-                        ],
-                      ),
-                      const SizedBox(height: 40),
-                      FloatingActionButton(
-                        onPressed: _endCall,
-                        backgroundColor: Colors.red,
-                        child: const Icon(Icons.call_end),
-                      ),
-                    ],
-                  ),
-                ],
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircleAvatar(
+                radius: 50,
+                child: Icon(Icons.person, size: 50),
               ),
-            ),
+              const SizedBox(height: 24),
+              Text(
+                contactName,
+                style: GoogleFonts.poppins(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                phoneNumber,
+                style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                _callLaunched ? 'Calling...' : 'Dialing...',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: Colors.grey[600],
+                ),
+              ),
+              const SizedBox(height: 32),
+              // End call button
+              if (_callLaunched)
+                FloatingActionButton(
+                  backgroundColor: Colors.red,
+                  onPressed: () {
+                    CallManagerService().hangupCall();
+                    Navigator.of(context).pop();
+                  },
+                  child: const Icon(Icons.call_end, color: Colors.white),
+                )
+              else
+                const CircularProgressIndicator(),
+            ],
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildCallControlButton(IconData icon, String label) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.white, size: 32),
-        const SizedBox(height: 8),
-        Text(label, style: GoogleFonts.poppins(color: Colors.white)),
-      ],
+        ),
+      ),
     );
   }
 }

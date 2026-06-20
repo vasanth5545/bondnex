@@ -151,7 +151,44 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
                     icon: Icons.delete_outline,
                     title: 'Delete Account',
                     isDestructive: true,
-                    onTap: () {},
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Delete Account?'),
+                          content: const Text(
+                            'This will permanently delete your account, wipe all your data, call logs, and messages. This action cannot be undone. Are you sure?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                              onPressed: () async {
+                                try {
+                                  Navigator.of(context).pop(); // Close dialog
+                                  // Show a loading indicator if desired, but for now just call
+                                  await userProvider.deleteAccount();
+                                  if (!context.mounted) return;
+                                  Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Account successfully deleted.')),
+                                  );
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Failed to delete account: ${e.toString()}')),
+                                  );
+                                }
+                              },
+                              child: const Text('Delete Permanently'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 20),
                 ],

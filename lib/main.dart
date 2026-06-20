@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'firebase_options.dart';
 import 'package:device_preview/device_preview.dart';
 
@@ -43,11 +44,35 @@ import 'package:bondnex/screens/profile/edit_profile_screen.dart';
 import 'package:bondnex/screens/profile/update_status_screen.dart'; // Puthu screen ah import pannunga
 import 'package:bondnex/settings/profile/account_settings_screen.dart';
 import 'package:bondnex/settings/security/panic_button_settings_screen.dart';
+import 'package:bondnex/settings/legal/privacy_policy_screen.dart';
+import 'package:bondnex/settings/legal/terms_screen.dart';
+import 'package:bondnex/phone/widgets/call_overlay_handler.dart'; // Added for Call UI overlay
+
+import 'package:bondnex/services/background/work_manager_service.dart';
+import 'package:bondnex/services/background/fcm_service.dart';
+import 'package:bondnex/services/security/rasp_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // ignore: deprecated_member_use
+  await FirebaseAppCheck.instance.activate(
+    // ignore: deprecated_member_use
+    androidProvider: AndroidProvider.playIntegrity,
+    // ignore: deprecated_member_use
+    appleProvider: AppleProvider.appAttest,
+    providerWeb: ReCaptchaV3Provider('recaptcha-v3-site-key'),
+  );
+
+  // Initialize Security Services
+  await RaspService().init();
+  await FCMService().init();
+
   await DatabaseHelper().initDatabase();
+
+  await WorkManagerService.init();
+  WorkManagerService.registerPeriodicSync();
 
   runApp(
     DevicePreview(
@@ -85,7 +110,10 @@ class BondNexApp extends StatelessWidget {
 
     return MaterialApp(
       locale: DevicePreview.locale(context),
-      builder: DevicePreview.appBuilder,
+      builder: (context, child) {
+        final devicePreviewBuilder = DevicePreview.appBuilder(context, child);
+        return CallOverlayHandler(child: devicePreviewBuilder);
+      },
       title: 'BondNex',
       debugShowCheckedModeBanner: false,
       themeMode: themeProvider.themeMode,
@@ -265,8 +293,9 @@ class BondNexApp extends StatelessWidget {
         '/display_options': (context) => const DisplayOptionsScreen(),
         '/intro_dashboard': (context) => const IntroDashboardScreen(),
         '/edit_profile': (context) => const EditProfileScreen(),
-        '/update_status': (context) =>
-            const UpdateStatusScreen(), // Intha line ah add pannunga
+        '/update_status': (context) => const UpdateStatusScreen(),
+        '/privacy_policy': (context) => const PrivacyPolicyScreen(),
+        '/terms_conditions': (context) => const TermsAndConditionsScreen(),
       },
     );
   }

@@ -1,8 +1,11 @@
 // File: lib/services/database_helper.dart
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../models/call_log_model.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:math';
+import 'dart:convert';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -10,6 +13,8 @@ class DatabaseHelper {
   DatabaseHelper._internal();
 
   static Database? _database;
+  final _secureStorage = const FlutterSecureStorage();
+  static const String _dbKeyStorageKey = 'bondnex_db_encryption_key';
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -17,14 +22,29 @@ class DatabaseHelper {
     return _database!;
   }
 
+  Future<String> _getOrGenerateEncryptionKey() async {
+    String? key = await _secureStorage.read(key: _dbKeyStorageKey);
+    if (key == null) {
+      final random = Random.secure();
+      final bytes = List<int>.generate(32, (i) => random.nextInt(256));
+      key = base64UrlEncode(bytes);
+      await _secureStorage.write(key: _dbKeyStorageKey, value: key);
+    }
+    return key;
+  }
+
   Future<Database> initDatabase() async {
     if (_database != null) {
       return _database!;
     }
     final documentsDirectory = await getApplicationDocumentsDirectory();
-    final path = join(documentsDirectory.path, 'bondnex.db');
+    final path = join(documentsDirectory.path, 'bondnex_secure.db'); // New db name to avoid crash on existing unencrypted db
+    
+    final dbKey = await _getOrGenerateEncryptionKey();
+
     _database = await openDatabase(
       path, 
+      password: dbKey,
       version: 2, 
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
@@ -201,5 +221,15 @@ class DatabaseHelper {
       return maps.first['timestamp'] as int;
     }
     return 0; // Return 0 if no messages exist
+  }
+
+  Future<void> deleteEntireDatabase() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    final documentsDirectory = await getApplicationDocumentsDirectory();
+    final path = join(documentsDirectory.path, 'bondnex_secure.db');
+    await deleteDatabase(path);
   }
 }
