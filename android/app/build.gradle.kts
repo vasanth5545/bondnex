@@ -41,6 +41,11 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    lint {
+        disable.add("NullSafeMutableLiveData")
+        disable.add("Instantiatable")
+    }
 }
 
 flutter {

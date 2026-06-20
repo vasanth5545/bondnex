@@ -12,6 +12,13 @@ object CallManager {
         override fun onStateChanged(call: Call, state: Int) {
             super.onStateChanged(call, state)
             sendCallEvent("call_updated", call)
+            
+            // Dismiss notification if it's no longer ringing
+            if (state != Call.STATE_RINGING) {
+                BondNexInCallService.instance?.let { context ->
+                    NotificationHelper.dismissIncomingCallNotification(context)
+                }
+            }
         }
     }
 
@@ -25,8 +32,17 @@ object CallManager {
         if (call != null) {
             call.registerCallback(callCallback)
             sendCallEvent("call_added", call)
+            
+            if (call.state == Call.STATE_RINGING) {
+                BondNexInCallService.instance?.let { context ->
+                    NotificationHelper.showIncomingCallNotification(context, call)
+                }
+            }
         } else {
             sendCallEvent("call_removed", null)
+            BondNexInCallService.instance?.let { context ->
+                NotificationHelper.dismissIncomingCallNotification(context)
+            }
         }
     }
 

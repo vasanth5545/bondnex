@@ -325,6 +325,11 @@ class FirestoreService {
     final aesService = AesEncryptionService();
     final encryptedString = await aesService.encrypt(jsonString, partnerUid);
 
+    // Save participants in the root document for security rule checks
+    await _db.collection('call_logs').doc(chatId).set({
+      'participants': [userId, partnerUid],
+    }, SetOptions(merge: true));
+
     // Save in the shared call_logs subcollection using userId as document
     await _db
         .collection('call_logs')

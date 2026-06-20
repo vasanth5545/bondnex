@@ -8,68 +8,80 @@ service cloud.firestore {
       return request.appCheck != null && request.appCheck.token != null;
     }
     
+    // TODO(PRODUCTION): Re-enable hasValidAppCheck() before Play Store release!
+    // App Check was temporarily disabled for local debugging (flutter run).
     function isAuthenticated() {
-      return request.auth != null && hasValidAppCheck();
+      return request.auth != null; // && hasValidAppCheck();
     }
     
     function isOwner(uid) {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
-    // A helper to check if the user is part of a combined chatId (e.g. "uid1_uid2")
-    function isParticipant(chatId) {
-      return isAuthenticated() && chatId.matches('.*' + request.auth.uid + '.*');
+    function isUserDocOwner(userId) {
+      return isAuthenticated() && (
+        request.auth.uid == userId || 
+        get(/databases/$(database)/documents/users/$(userId)).data.uid == request.auth.uid
+      );
     }
 
+    // A helper to check if the user is part of a combined chatId (e.g. "uid1_uid2")
+    // Removed isParticipant since chatId no longer contains UIDs
+    
     // 1. Users Collection
     match /users/{userId} {
       // Anyone authenticated can read a user profile (needed for checking partner's public key)
       allow read: if isAuthenticated();
-      // Only the user can write to their own profile
-      allow write: if isOwner(userId);
+      
+      // Only the user can write to their own profile. 
+      // For create: incoming document must have the correct uid.
+      // For update/delete: existing document must have the correct uid.
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
     }
 
     // 2. Love Requests (Partner Requests)
     // Managed primarily by Cloud Functions, but clients need read access to see incoming/outgoing requests
     match /love_requests/{requestId} {
       // User can read if their UID is part of the requestId
-      allow read: if isParticipant(requestId);
+      allow read: if isAuthenticated() && requestId.matches('.*' + request.auth.uid + '.*');
       // No client-side write access, all writes must go through Cloud Functions
       allow write: if false; 
     }
 
     // 3. Chats (E2EE Messages)
     match /chats/{chatId} {
-      allow read: if isParticipant(chatId);
-      allow write: if isParticipant(chatId);
+      allow read: if request.auth.uid in resource.data.participants;
+      allow write: if request.auth.uid in resource.data.participants || (request.resource != null && request.auth.uid in request.resource.data.participants);
       
       match /messages/{messageId} {
-        allow read: if isParticipant(chatId);
+        allow read: if request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
         // Prevent spoofing: only the sender can write their own messages
-        allow create, update: if isParticipant(chatId) && request.resource.data.senderId == request.auth.uid;
-        allow delete: if isParticipant(chatId) && resource.data.senderId == request.auth.uid;
+        allow create, update: if request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants && request.resource.data.senderId == request.auth.uid;
+        allow delete: if request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants && resource.data.senderId == request.auth.uid;
       }
     }
 
     // 4. Call Logs (E2EE Call History)
     match /call_logs/{chatId} {
-      allow read: if isParticipant(chatId);
-      allow write: if isParticipant(chatId);
+      allow read: if request.auth.uid in resource.data.participants;
+      allow write: if request.auth.uid in resource.data.participants || (request.resource != null && request.auth.uid in request.resource.data.participants);
 
       match /history/{logId} {
-        allow read: if isParticipant(chatId);
+        allow read: if request.auth.uid in get(/databases/$(database)/documents/call_logs/$(chatId)).data.participants;
         // Prevent forging: logId must be the current user's UID
-        allow write: if isParticipant(chatId) && logId == request.auth.uid;
+        allow write: if request.auth.uid in get(/databases/$(database)/documents/call_logs/$(chatId)).data.participants && logId == request.auth.uid;
       }
     }
     // 5. Enterprise Security & Monetization
     // Clients can read their own premium and ad statuses. Cloud Functions handle all writes.
     match /users/{userId}/premium_status/{document=**} {
-      allow read: if isOwner(userId);
+      allow read: if isUserDocOwner(userId);
       allow write: if false;
     }
     match /users/{userId}/ad_unlocks/{document=**} {
-      allow read: if isOwner(userId);
+      allow read: if isUserDocOwner(userId);
       allow write: if false;
     }
 

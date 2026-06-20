@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import 'package:bondnex/services/auth/auth_service.dart';
+import 'package:bondnex/providers/user_provider.dart';
 import 'email_verification_screen.dart';
 import 'register_screen.dart'; // Import the new register screen
 
@@ -47,7 +48,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (user != null && mounted) {
         if (user.emailVerified) {
-          // UserProvider stream will automatically fetch user data and AuthWrapper will show a spinner meanwhile.
+          // If UserProvider is stuck in loggedOut state because of a previous error,
+          // authStateChanges won't fire again for the same user. Force a data load.
+          final userProvider = Provider.of<UserProvider>(context, listen: false);
+          if (userProvider.authStatus != AuthStatus.loggedIn) {
+             userProvider.loadUserDataFromFirestore(user);
+          }
+          
           if (!mounted) return;
           Navigator.of(
             context,

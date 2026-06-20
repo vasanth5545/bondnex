@@ -56,6 +56,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
+  // TODO(PRODUCTION): Ensure App Check Play Integrity is fully configured!
+  // Note: App Check requirement in firestore.rules is temporarily disabled for local debugging.
   // ignore: deprecated_member_use
   await FirebaseAppCheck.instance.activate(
     // ignore: deprecated_member_use

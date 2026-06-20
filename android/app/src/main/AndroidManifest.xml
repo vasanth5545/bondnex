@@ -114,6 +114,13 @@
                 <action android:name="android.intent.action.PHONE_STATE" />
             </intent-filter>
         </receiver>
+
+        <!-- Call Action Receiver -->
+        <receiver android:name=".CallActionReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.telecom.action.SHOW_MISSED_CALLS_NOTIFICATION" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Required to query activities that can process text -->

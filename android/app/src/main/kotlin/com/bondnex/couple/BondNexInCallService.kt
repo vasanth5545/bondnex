@@ -11,8 +11,8 @@ class BondNexInCallService : InCallService() {
 
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
-        CallManager.setCall(call)
         instance = this
+        CallManager.setCall(call)
     }
 
     override fun onCallRemoved(call: Call) {

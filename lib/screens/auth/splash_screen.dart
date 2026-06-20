@@ -10,6 +10,8 @@ import 'package:permission_handler/permission_handler.dart'; // Permission packa
 import '../../providers/user_provider.dart';
 import '../../providers/call_log_provider.dart';
 import 'auth_wrapper.dart';
+import 'default_dialer_prompt_screen.dart';
+import '../../services/telephony/call_manager_service.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -70,20 +72,32 @@ class _SplashScreenState extends State<SplashScreen> {
 
     await Permission.phone.request();
     await Permission.contacts.request();
+    await Permission.notification.request();
 
     if (mounted) {
       Provider.of<CallLogProvider>(context, listen: false).initializeCallLogs();
     }
   }
 
-  void _navigateToNextScreen(BuildContext context) {
-    Future.microtask(() {
-      if (context.mounted) {
+  bool _isNavigating = false;
+
+  Future<void> _navigateToNextScreen(BuildContext context) async {
+    if (_isNavigating) return;
+    _isNavigating = true;
+
+    final isDefaultDialer = await CallManagerService().isDefaultDialer();
+
+    if (context.mounted) {
+      if (!isDefaultDialer) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const DefaultDialerPromptScreen()),
+        );
+      } else {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const AuthWrapper()),
         );
       }
-    });
+    }
   }
 
   @override
